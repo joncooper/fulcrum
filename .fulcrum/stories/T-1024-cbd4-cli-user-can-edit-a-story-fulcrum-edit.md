@@ -5,7 +5,7 @@ id: T-1024-cbd4
 labels: []
 points: 2
 position: aN
-state: unstarted
+state: delivered
 type: feature
 ---
 

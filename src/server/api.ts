@@ -7,6 +7,7 @@ import {
   writeStoryAtomic,
 } from "../domain/io/stories.ts";
 import { closeIteration } from "../domain/iteration-close.ts";
+import { replaceTitleInBody, titleFromBody } from "../domain/markdown.ts";
 import { between } from "../domain/position.ts";
 import { StoryFrontmatterSchema, idMatches } from "../domain/schemas/story.ts";
 import { transition, type Command } from "../domain/state-machine.ts";
@@ -19,21 +20,6 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
 }
 
-function titleFromBody(body: string): string {
-  const firstLine = body.split("\n")[0] ?? "";
-  return firstLine.replace(/^#\s*/, "").trim();
-}
-
-/** Replace the first H1 line in body with `# {title}`; preserves the rest. */
-function replaceTitleInBody(body: string, title: string): string {
-  const lines = body.split("\n");
-  if (lines.length > 0 && /^#\s/.test(lines[0]!)) {
-    lines[0] = `# ${title}`;
-    return lines.join("\n");
-  }
-  // No H1 — prepend one with a blank separator.
-  return `# ${title}\n\n${body}`;
-}
 
 export type ApiContext = {
   project: ProjectRoot;

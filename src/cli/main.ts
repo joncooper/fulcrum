@@ -1,3 +1,4 @@
+import { runEdit } from "./commands/edit.ts";
 import { runInit } from "./commands/init.ts";
 import { runList } from "./commands/list.ts";
 import { runNew } from "./commands/new.ts";
@@ -16,6 +17,9 @@ Commands (M1):
                            Flags: --points N --epic SLUG --labels a,b,c --json
   list                     List all stories. Flags: --state X --type Y --json
   show <id>                Print one story (frontmatter + body). Flag: --json
+  edit <id>                Edit story fields. Flags: --title --description
+                           --type --points (N|-) --labels a,b --epic (S|-)
+                           --icebox true|false --body @- --json
   start <id>               Transition unstarted → started.
   finish <id>              Transition → finished (auto-chains forward).
   deliver <id>             Transition → delivered (auto-chains forward).
@@ -62,6 +66,8 @@ export async function main(argv: string[]): Promise<number> {
       return runList(rest);
     case "show":
       return runShow(rest);
+    case "edit":
+      return runEdit(rest);
     case "serve":
       return runServe(rest);
     default:

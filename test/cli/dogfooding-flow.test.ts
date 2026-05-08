@@ -250,4 +250,70 @@ describe("CLI dogfooding flow", () => {
     expect(yml).toContain("name: my-thing");
     expect(yml).toContain("version: 1");
   });
+
+  test("edit changes the title (splices into H1)", async () => {
+    await main(["init"]);
+    await main(["new", "feature", "old title", "--points", "3"]);
+    stdoutChunks = [];
+    expect(await main(["edit", "1001", "--title", "renamed!"])).toBe(0);
+    const dir = join(cwd, ".fulcrum/stories");
+    const fs = await import("node:fs/promises");
+    const files = await fs.readdir(dir);
+    const content = readFileSync(join(dir, files[0]!), "utf-8");
+    expect(content).toContain("# renamed!");
+    expect(content).not.toContain("# old title");
+  });
+
+  test("edit changes points + type", async () => {
+    await main(["init"]);
+    await main(["new", "feature", "x", "--points", "1"]);
+    stdoutChunks = [];
+    expect(await main(["edit", "1001", "--points", "8", "--type", "bug"])).toBe(0);
+    stdoutChunks = [];
+    await main(["show", "1001"]);
+    const out = stdout();
+    expect(out).toContain("type:      bug");
+    expect(out).toContain("points:    8");
+  });
+
+  test("edit --points - clears points (chore)", async () => {
+    await main(["init"]);
+    await main(["new", "chore", "do laundry", "--points", "1"]);
+    stdoutChunks = [];
+    expect(await main(["edit", "1001", "--points", "-"])).toBe(0);
+    stdoutChunks = [];
+    await main(["show", "1001"]);
+    const out = stdout();
+    expect(out).not.toContain("points:    1");
+  });
+
+  test("edit rejects off-scale points (4)", async () => {
+    await main(["init"]);
+    await main(["new", "feature", "x", "--points", "1"]);
+    stdoutChunks = [];
+    stderrChunks = [];
+    expect(await main(["edit", "1001", "--points", "4"])).toBe(1);
+    expect(stderr()).toContain("INVALID_FRONTMATTER");
+  });
+
+  test("edit with no flags shows usage", async () => {
+    await main(["init"]);
+    await main(["new", "feature", "x", "--points", "1"]);
+    stderrChunks = [];
+    expect(await main(["edit", "1001"])).toBe(1);
+    expect(stderr()).toContain("usage");
+  });
+
+  test("edit --description rewrites body but keeps title", async () => {
+    await main(["init"]);
+    await main(["new", "feature", "kept title", "--points", "1"]);
+    stdoutChunks = [];
+    expect(await main(["edit", "1001", "--description", "Now with detail."])).toBe(0);
+    const dir = join(cwd, ".fulcrum/stories");
+    const fs = await import("node:fs/promises");
+    const files = await fs.readdir(dir);
+    const content = readFileSync(join(dir, files[0]!), "utf-8");
+    expect(content).toContain("# kept title");
+    expect(content).toContain("Now with detail.");
+  });
 });

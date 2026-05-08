@@ -5,6 +5,22 @@ import { fulcrumYamlStringify } from "./yaml.ts";
 const FRONTMATTER_RE = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/;
 const CONFLICT_MARKER = /^(<<<<<<< |\|\|\|\|\|\|\| |======= |>>>>>>> )/m;
 
+/** Extract the H1 title text from a story body. Returns "" if no H1. */
+export function titleFromBody(body: string): string {
+  const firstLine = body.split("\n")[0] ?? "";
+  return firstLine.replace(/^#\s*/, "").trim();
+}
+
+/** Replace the H1 line with `# {title}`; if no H1 exists, prepend one. */
+export function replaceTitleInBody(body: string, title: string): string {
+  const lines = body.split("\n");
+  if (lines.length > 0 && /^#\s/.test(lines[0]!)) {
+    lines[0] = `# ${title}`;
+    return lines.join("\n");
+  }
+  return `# ${title}\n\n${body}`;
+}
+
 export type ParsedStoryFile = {
   frontmatter: unknown; // not yet schema-validated; caller pipes through StoryFrontmatterSchema
   body: string;
