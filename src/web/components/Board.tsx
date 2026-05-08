@@ -10,11 +10,12 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import type { ProjectDto, StoryDto, TransitionVerb } from "../api.ts";
+import type { ProjectDto, StoryDto, StoryPatch, TransitionVerb } from "../api.ts";
 import { useUpdateStoryPosition } from "../api.ts";
 import { deriveColumns, type Column } from "../columns.ts";
 import type { FocusState } from "../keyboard.ts";
 import { computeBetween } from "../reorder.ts";
+import { EditStoryForm } from "./EditStoryForm.tsx";
 import { EmptyState } from "./EmptyState.tsx";
 import { ExpandedStory } from "./ExpandedStory.tsx";
 import { StoryRow } from "./StoryRow.tsx";
@@ -39,12 +40,20 @@ export function Board({
   focus,
   setFocus,
   onTransition,
+  editingId,
+  onEditCancel,
+  onEditSave,
+  editSaving,
 }: {
   stories: StoryDto[];
   project: ProjectDto;
   focus: FocusState;
   setFocus: (next: FocusState) => void;
   onTransition: (id: string, verb: TransitionVerb, reason?: string) => void;
+  editingId: string | null;
+  onEditCancel: () => void;
+  onEditSave: (id: string, patch: StoryPatch) => void;
+  editSaving: boolean;
 }) {
   const columns = useMemo(() => deriveColumns(stories, project), [stories, project]);
   const updatePosition = useUpdateStoryPosition();
@@ -138,12 +147,19 @@ export function Board({
                             setFocus({ focusedId: s.id, expandedId: expanded });
                           }}
                         />
-                        {focus.expandedId === s.id && (
+                        {focus.expandedId === s.id && editingId === s.id ? (
+                          <EditStoryForm
+                            story={s}
+                            saving={editSaving}
+                            onCancel={onEditCancel}
+                            onSave={(patch) => onEditSave(s.id, patch)}
+                          />
+                        ) : focus.expandedId === s.id ? (
                           <ExpandedStory
                             story={s}
                             onTransition={(verb, reason) => onTransition(s.id, verb, reason)}
                           />
-                        )}
+                        ) : null}
                       </div>
                     ))
                   )}

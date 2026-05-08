@@ -177,12 +177,130 @@ describe("API: PATCH /api/stories/:id (position)", () => {
     const res = await fetch(`${server.url}/api/stories/${target.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ points: 8 }),
+      body: JSON.stringify({ state: "started" }),
     });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { kind: string; message: string } };
     expect(body.error.kind).toBe("INVALID_FRONTMATTER");
-    expect(body.error.message).toContain("points");
+    expect(body.error.message).toContain("state");
+  });
+
+  test("updates title (replaces H1 in body)", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const target = list.stories[0]!;
+
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "renamed first story" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: true; story: { title: string; body: string } };
+    expect(body.ok).toBe(true);
+    expect(body.story.title).toBe("renamed first story");
+    expect(body.story.body.split("\n")[0]).toBe("# renamed first story");
+  });
+
+  test("updates points + type together", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const target = list.stories[0]!;
+
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ points: 8, type: "bug" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: true; story: { points: number; type: string } };
+    expect(body.story.points).toBe(8);
+    expect(body.story.type).toBe("bug");
+  });
+
+  test("rejects invalid points (off-scale) via schema validation", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const target = list.stories[0]!;
+
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ points: 4 }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { kind: string } };
+    expect(body.error.kind).toBe("INVALID_FRONTMATTER");
+  });
+
+  test("clears points with null", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string; type: string }[];
+    };
+    // Use the chore (no points required) so clearing is valid.
+    const chore = list.stories.find((s) => s.type === "chore")!;
+
+    const res = await fetch(`${server.url}/api/stories/${chore.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ points: null }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: true; story: { points?: number } };
+    expect(body.story.points).toBeUndefined();
+  });
+
+  test("toggles icebox flag", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const target = list.stories[0]!;
+
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ icebox: true }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: true; story: { icebox: boolean } };
+    expect(body.story.icebox).toBe(true);
+  });
+
+  test("updates labels (array)", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const target = list.stories[0]!;
+
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ labels: ["alpha", "beta"] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: true; story: { labels: string[] } };
+    expect(body.story.labels).toEqual(["alpha", "beta"]);
+  });
+
+  test("replaces full body when body field is provided", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const target = list.stories[0]!;
+
+    const newBody = "# kept title\n\nThis is the new description.\n";
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body: newBody }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: true; story: { body: string; title: string } };
+    expect(body.story.body).toBe(newBody);
+    expect(body.story.title).toBe("kept title");
   });
 
   test("rejects empty body with 400", async () => {

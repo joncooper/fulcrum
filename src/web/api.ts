@@ -102,12 +102,50 @@ export function useTransitionStory() {
 }
 
 /**
- * Update a story's Lexorank `position` field. M1 supports position only;
- * the server endpoint is a generic PATCH that future stories (edit, icebox)
- * extend with additional frontmatter fields.
- *
- * Optimistic update: rewrite the story's position in the cached list and
- * re-sort by position; revert on error.
+ * Edit a story's frontmatter and/or body via PATCH. Pass only the fields
+ * being changed. `points: null` and `epic: null` clear those fields.
+ */
+export type StoryPatch = {
+  title?: string;
+  body?: string;
+  points?: number | null;
+  type?: StoryDto["type"];
+  labels?: string[];
+  epic?: string | null;
+  icebox?: boolean;
+};
+
+export function useUpdateStory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { id: string; patch: StoryPatch; expectedHash?: string }) => {
+      const res = await fetch(`/api/stories/${vars.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...vars.patch,
+          ...(vars.expectedHash !== undefined ? { expectedHash: vars.expectedHash } : {}),
+        }),
+      });
+      const body = (await res.json()) as
+        | { ok: true; story: StoryDto; path: string; hash: string }
+        | { ok?: false; error: { kind: string; message: string } };
+      if (!res.ok || !("ok" in body) || body.ok !== true) {
+        const e = "error" in body ? body.error : null;
+        throw new Error(e?.message ?? `update failed: ${res.status}`);
+      }
+      return body;
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["stories"] });
+    },
+  });
+}
+
+/**
+ * Update a story's Lexorank `position` field. Thin wrapper around the
+ * generic PATCH that does an optimistic local re-sort (drag/drop and J/K
+ * keyboard reorder both want the immediate visual reflow).
  */
 export function useUpdateStoryPosition() {
   const qc = useQueryClient();

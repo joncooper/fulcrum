@@ -8,7 +8,7 @@ import {
 } from "../domain/io/stories.ts";
 import { closeIteration } from "../domain/iteration-close.ts";
 import { between } from "../domain/position.ts";
-import { idMatches } from "../domain/schemas/story.ts";
+import { StoryFrontmatterSchema, idMatches } from "../domain/schemas/story.ts";
 import { transition, type Command } from "../domain/state-machine.ts";
 import type { SseHub } from "./sse.ts";
 import type { FileWatcher } from "./file-watcher.ts";
@@ -24,6 +24,17 @@ function titleFromBody(body: string): string {
   return firstLine.replace(/^#\s*/, "").trim();
 }
 
+/** Replace the first H1 line in body with `# {title}`; preserves the rest. */
+function replaceTitleInBody(body: string, title: string): string {
+  const lines = body.split("\n");
+  if (lines.length > 0 && /^#\s/.test(lines[0]!)) {
+    lines[0] = `# ${title}`;
+    return lines.join("\n");
+  }
+  // No H1 — prepend one with a blank separator.
+  return `# ${title}\n\n${body}`;
+}
+
 export type ApiContext = {
   project: ProjectRoot;
   hub: SseHub;
@@ -37,7 +48,9 @@ export type ApiContext = {
  *   GET    /api/stories
  *   GET    /api/stories/:id
  *   POST   /api/stories                         { type, title, points?, body? }
- *   PATCH  /api/stories/:id                     { position?, expectedHash? }
+ *   PATCH  /api/stories/:id                     { position?, title?, body?,
+ *                                                 points?, type?, labels?,
+ *                                                 epic?, icebox?, expectedHash? }
  *   POST   /api/stories/:id/transitions/:verb   { reason? } for reject
  *   POST   /api/iteration/close                 { acceptedIds: string[] }
  *   GET    /api/events                          SSE stream
@@ -164,41 +177,48 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
     );
   }
 
-  // PATCH /api/stories/:id — partial frontmatter update. M1: position only.
-  // Future stories (T-1019 edit, T-1021 icebox) extend this with more fields.
+  // PATCH /api/stories/:id — partial story update. Editable fields:
+  //   position, title, body, points, type, labels, epic, icebox.
+  // Immutable: id, state (use /transitions), iteration (set at close),
+  // created, reject_reason (set by reject transition).
   const patchMatch = /^\/api\/stories\/([^/]+)$/.exec(pathname);
   if (method === "PATCH" && patchMatch) {
     const idQuery = patchMatch[1]!;
 
-    let reqBody: { position?: unknown; expectedHash?: unknown };
+    let reqBody: Record<string, unknown>;
     try {
-      reqBody = (await req.json()) as typeof reqBody;
+      reqBody = (await req.json()) as Record<string, unknown>;
     } catch {
       return json({ error: { kind: "INVALID_FRONTMATTER", message: "body is not JSON" } }, 400);
     }
 
-    const allowed = new Set(["position", "expectedHash"]);
-    const unknownFields = Object.keys(reqBody).filter((k) => !allowed.has(k));
+    const ALLOWED = new Set([
+      "position",
+      "title",
+      "body",
+      "points",
+      "type",
+      "labels",
+      "epic",
+      "icebox",
+      "expectedHash",
+    ]);
+    const unknownFields = Object.keys(reqBody).filter((k) => !ALLOWED.has(k));
     if (unknownFields.length > 0) {
       return json(
         {
           error: {
             kind: "INVALID_FRONTMATTER",
-            message: `unsupported fields: ${unknownFields.join(", ")} (M1 PATCH supports: position)`,
+            message: `unsupported fields: ${unknownFields.join(", ")}`,
           },
         },
         400,
       );
     }
-    if (reqBody.position === undefined) {
+    const editableFields = Object.keys(reqBody).filter((k) => k !== "expectedHash");
+    if (editableFields.length === 0) {
       return json(
         { error: { kind: "INVALID_FRONTMATTER", message: "patch requires at least one field" } },
-        400,
-      );
-    }
-    if (typeof reqBody.position !== "string" || reqBody.position.length === 0) {
-      return json(
-        { error: { kind: "INVALID_FRONTMATTER", message: "position must be a non-empty string" } },
         400,
       );
     }
@@ -209,6 +229,38 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
       );
     }
 
+    // Per-field shape checks (Zod re-validates the whole frontmatter below).
+    if (reqBody.position !== undefined) {
+      if (typeof reqBody.position !== "string" || reqBody.position.length === 0) {
+        return json({ error: { kind: "INVALID_FRONTMATTER", message: "position must be a non-empty string" } }, 400);
+      }
+    }
+    if (reqBody.title !== undefined) {
+      if (typeof reqBody.title !== "string" || reqBody.title.trim().length === 0) {
+        return json({ error: { kind: "INVALID_FRONTMATTER", message: "title must be a non-empty string" } }, 400);
+      }
+    }
+    if (reqBody.body !== undefined && typeof reqBody.body !== "string") {
+      return json({ error: { kind: "INVALID_FRONTMATTER", message: "body must be a string" } }, 400);
+    }
+    if (reqBody.icebox !== undefined && typeof reqBody.icebox !== "boolean") {
+      return json({ error: { kind: "INVALID_FRONTMATTER", message: "icebox must be a boolean" } }, 400);
+    }
+    if (reqBody.labels !== undefined) {
+      if (!Array.isArray(reqBody.labels) || !reqBody.labels.every((x) => typeof x === "string")) {
+        return json({ error: { kind: "INVALID_FRONTMATTER", message: "labels must be string[]" } }, 400);
+      }
+    }
+    if (reqBody.epic !== undefined && reqBody.epic !== null && typeof reqBody.epic !== "string") {
+      return json({ error: { kind: "INVALID_FRONTMATTER", message: "epic must be a string or null" } }, 400);
+    }
+    if (reqBody.points !== undefined && reqBody.points !== null && typeof reqBody.points !== "number") {
+      return json({ error: { kind: "INVALID_FRONTMATTER", message: "points must be a number or null" } }, 400);
+    }
+    if (reqBody.type !== undefined && reqBody.type !== "feature" && reqBody.type !== "bug" && reqBody.type !== "chore" && reqBody.type !== "release") {
+      return json({ error: { kind: "INVALID_FRONTMATTER", message: "type must be feature/bug/chore/release" } }, 400);
+    }
+
     const path = await findStoryPath({ storiesDir: project.storiesDir, query: idQuery });
     if (!path.ok) {
       const status = path.error.kind === "NOT_FOUND" ? 404 : 500;
@@ -217,10 +269,43 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
     const file = await readStoryFile(path.value);
     if (!file.ok) return json({ error: file.error }, 500);
 
-    const updated = {
-      frontmatter: { ...file.value.story.frontmatter, position: reqBody.position },
-      body: file.value.story.body,
-    };
+    // Compose the next frontmatter. `epic: null` clears the field; `points: null` clears it.
+    const cur = file.value.story.frontmatter;
+    const nextFm: Record<string, unknown> = { ...cur };
+    if (reqBody.position !== undefined) nextFm.position = reqBody.position;
+    if (reqBody.type !== undefined) nextFm.type = reqBody.type;
+    if (reqBody.labels !== undefined) nextFm.labels = reqBody.labels;
+    if (reqBody.icebox !== undefined) nextFm.icebox = reqBody.icebox;
+    if (reqBody.epic !== undefined) {
+      if (reqBody.epic === null) delete nextFm.epic;
+      else nextFm.epic = reqBody.epic;
+    }
+    if (reqBody.points !== undefined) {
+      if (reqBody.points === null) delete nextFm.points;
+      else nextFm.points = reqBody.points;
+    }
+
+    const validated = StoryFrontmatterSchema.safeParse(nextFm);
+    if (!validated.success) {
+      return json(
+        {
+          error: {
+            kind: "INVALID_FRONTMATTER",
+            message: validated.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
+          },
+        },
+        400,
+      );
+    }
+
+    // Body: explicit `body` wins; otherwise splice title into existing body.
+    let nextBody = file.value.story.body;
+    if (reqBody.body !== undefined) nextBody = reqBody.body as string;
+    if (reqBody.title !== undefined) {
+      nextBody = replaceTitleInBody(nextBody, (reqBody.title as string).trim());
+    }
+
+    const updated = { frontmatter: validated.data, body: nextBody };
     const written = await writeStoryAtomic({
       path: file.value.path,
       story: updated,

@@ -5,7 +5,7 @@ id: T-1019-0866
 labels: []
 points: 5
 position: aI
-state: unstarted
+state: delivered
 type: feature
 ---
 

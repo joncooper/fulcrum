@@ -5,7 +5,9 @@ import {
   useSseInvalidator,
   useStories,
   useTransitionStory,
+  useUpdateStory,
   type IterationClosedEvent,
+  type StoryPatch,
   type TransitionVerb,
 } from "./api.ts";
 import { Board } from "./components/Board.tsx";
@@ -43,8 +45,10 @@ export function App() {
   const stories = useStories();
   const { theme, toggle } = useTheme();
   const transitionStory = useTransitionStory();
+  const updateStory = useUpdateStory();
   const closeIter = useCloseIteration();
   const [focus, setFocus] = useState<FocusState>({ focusedId: null, expandedId: null });
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [lastClosed, setLastClosed] = useState<IterationClosedEvent | null>(null);
@@ -73,14 +77,35 @@ export function App() {
     [transitionStory],
   );
 
-  // Disable the board-level keyboard shortcuts while the close panel is up;
-  // the panel installs its own handlers.
+  const handleStartEdit = useCallback((id: string) => {
+    setEditingId(id);
+    setFocus((prev) => ({ focusedId: id, expandedId: id }));
+  }, []);
+
+  const handleCancelEdit = useCallback(() => setEditingId(null), []);
+
+  const handleSaveEdit = useCallback(
+    (id: string, patch: StoryPatch) => {
+      const story = flat.find((s) => s.id === id);
+      updateStory.mutate(
+        { id, patch, expectedHash: story?.hash },
+        {
+          onSuccess: () => setEditingId(null),
+        },
+      );
+    },
+    [flat, updateStory],
+  );
+
+  // Disable the board-level keyboard shortcuts while the close panel or an
+  // edit form is up; those install their own handlers.
   useKeyboard({
     stories: flat,
     focus,
     setFocus,
     onTransition: handleTransition,
-    enabled: !panelOpen,
+    onEdit: handleStartEdit,
+    enabled: !panelOpen && editingId === null,
   });
 
   // Listen for the panel-open keybind ('I' = shift+i) and the close mutation.
@@ -172,6 +197,10 @@ export function App() {
           focus={focus}
           setFocus={setFocus}
           onTransition={handleTransition}
+          editingId={editingId}
+          onEditCancel={handleCancelEdit}
+          onEditSave={handleSaveEdit}
+          editSaving={updateStory.isPending}
         />
         {panelOpen && (
           <IterationClosePanel
@@ -247,6 +276,9 @@ function StatusBar({ ritualNote }: { ritualNote?: string | null } = {}) {
       <span>s/f/d/a</span>
       <span>start/finish/deliver/accept</span>
       <span className="sep">·</span>
+      <span>e</span>
+      <span>edit</span>
+      <span className="sep">·</span>
       <span>r</span>
       <span>reject</span>
       <span className="sep">·</span>
@@ -255,7 +287,6 @@ function StatusBar({ ritualNote }: { ritualNote?: string | null } = {}) {
       <span className="sep">·</span>
       <span>esc</span>
       <span>collapse</span>
-      <span style={{ marginLeft: "auto", color: "var(--ink-muted)" }}>E2</span>
     </footer>
   );
 }

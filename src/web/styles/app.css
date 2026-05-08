@@ -297,6 +297,90 @@ body {
   color: var(--ink-muted);
 }
 
+/* ─── EDIT FORM ─── */
+.edit-form {
+  background: var(--bg-app);
+  border-bottom: 1px solid var(--rule);
+  padding: 10px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.edit-row-stretch {
+  align-items: flex-start;
+}
+.edit-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-secondary);
+  min-width: 64px;
+}
+.edit-label-inline {
+  margin-left: 12px;
+  min-width: 40px;
+}
+.edit-input {
+  font-family: var(--font-body);
+  font-size: 13px;
+  background: var(--bg-surface);
+  border: 1px solid var(--rule);
+  color: var(--ink-primary);
+  padding: 4px 8px;
+  border-radius: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.edit-input:focus {
+  outline: 2px solid var(--type-feature);
+  outline-offset: -2px;
+}
+.edit-input-narrow {
+  flex: 0 0 80px;
+}
+.edit-title {
+  font-weight: 500;
+}
+.edit-textarea {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  resize: vertical;
+}
+.edit-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  border-top: 1px solid var(--rule);
+  padding-top: 10px;
+}
+.edit-actions .action-btn {
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 4px 10px;
+  background: var(--ink-primary);
+  color: var(--bg-app);
+  border: 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.edit-actions .action-btn:hover {
+  opacity: 0.85;
+}
+.edit-actions .action-btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.edit-actions .expanded-hint {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+
 /* ─── EMPTY STATE ─── */
 .empty {
   padding: 56px 48px;

@@ -19,10 +19,12 @@ export function useKeyboard(opts: {
   focus: FocusState;
   setFocus: (next: FocusState) => void;
   onTransition: (id: string, verb: TransitionVerb, reason?: string) => void;
+  /** Begin editing the focused story (called for the `e` keystroke). */
+  onEdit?: (id: string) => void;
   /** When false, the global handler is detached (e.g. while a modal panel owns input). */
   enabled?: boolean;
 }) {
-  const { stories, focus, setFocus, onTransition, enabled = true } = opts;
+  const { stories, focus, setFocus, onTransition, onEdit, enabled = true } = opts;
 
   useEffect(() => {
     if (!enabled) return;
@@ -81,9 +83,14 @@ export function useKeyboard(opts: {
         if (reason && reason.trim().length > 0) {
           onTransition(focus.focusedId, "reject", reason.trim());
         }
+        return;
+      }
+      if (e.key === "e" && focus.focusedId && onEdit) {
+        e.preventDefault();
+        onEdit(focus.focusedId);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [stories, focus, setFocus, onTransition, enabled]);
+  }, [stories, focus, setFocus, onTransition, onEdit, enabled]);
 }
