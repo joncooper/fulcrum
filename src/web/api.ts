@@ -101,6 +101,55 @@ export function useTransitionStory() {
   });
 }
 
+/**
+ * Update a story's Lexorank `position` field. M1 supports position only;
+ * the server endpoint is a generic PATCH that future stories (edit, icebox)
+ * extend with additional frontmatter fields.
+ *
+ * Optimistic update: rewrite the story's position in the cached list and
+ * re-sort by position; revert on error.
+ */
+export function useUpdateStoryPosition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { id: string; position: string; expectedHash?: string }) => {
+      const res = await fetch(`/api/stories/${vars.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          position: vars.position,
+          ...(vars.expectedHash !== undefined ? { expectedHash: vars.expectedHash } : {}),
+        }),
+      });
+      const body = (await res.json()) as
+        | { ok: true; story: StoryDto; path: string; hash: string }
+        | { ok?: false; error: { kind: string; message: string } };
+      if (!res.ok || !("ok" in body) || body.ok !== true) {
+        const e = "error" in body ? body.error : null;
+        throw new Error(e?.message ?? `position update failed: ${res.status}`);
+      }
+      return body;
+    },
+    onMutate: async (vars) => {
+      await qc.cancelQueries({ queryKey: ["stories"] });
+      const prev = qc.getQueryData<StoryDto[]>(["stories"]);
+      if (prev) {
+        const next = prev
+          .map((s) => (s.id === vars.id ? { ...s, position: vars.position } : s))
+          .sort((a, b) => (a.position < b.position ? -1 : 1));
+        qc.setQueryData<StoryDto[]>(["stories"], next);
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["stories"], ctx.prev);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["stories"] });
+    },
+  });
+}
+
 export type IterationClosedEvent = {
   closed_iteration: number;
   next_iteration: number;

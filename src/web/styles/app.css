@@ -128,8 +128,9 @@ body {
   align-items: center;
   padding: 4px 10px;
   border-bottom: 1px solid var(--rule);
-  cursor: pointer;
+  cursor: grab;
   line-height: 1.35;
+  touch-action: none;
 }
 .story:hover {
   background: rgba(0, 0, 0, 0.025);
@@ -140,6 +141,13 @@ body {
 .story.is-focused {
   outline: 2px solid var(--type-feature);
   outline-offset: -2px;
+}
+.story.is-dragging {
+  cursor: grabbing;
+  background: rgba(0, 0, 0, 0.04);
+}
+[data-theme="dark"] .story.is-dragging {
+  background: rgba(255, 255, 255, 0.06);
 }
 .story .title {
   font-size: 13px;

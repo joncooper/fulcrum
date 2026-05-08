@@ -1,4 +1,6 @@
 import { useEffect, useRef } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { StoryDto } from "../api.ts";
 
 const TYPE_ICONS: Record<StoryDto["type"], string> = {
@@ -18,21 +20,40 @@ export function StoryRow({
   onClick: () => void;
 }) {
   const icon = TYPE_ICONS[story.type];
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    isDragging,
+  } = useSortable({ id: story.id });
 
   // Scroll focused row into view when it changes (keyboard-driven nav stays visible).
   useEffect(() => {
-    if (isFocused && ref.current) {
+    if (isFocused && ref.current && !isDragging) {
       ref.current.scrollIntoView({ block: "nearest", behavior: "auto" });
     }
-  }, [isFocused]);
+  }, [isFocused, isDragging]);
+
+  // 0ms drag motion per DESIGN.md — apply transform without easing.
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    opacity: isDragging ? 0.55 : undefined,
+  };
 
   return (
     <div
-      ref={ref}
-      className={`story${isFocused ? " is-focused" : ""}`}
+      ref={(node) => {
+        setNodeRef(node);
+        ref.current = node;
+      }}
+      style={style}
+      className={`story${isFocused ? " is-focused" : ""}${isDragging ? " is-dragging" : ""}`}
       title={story.id}
       onClick={onClick}
+      {...attributes}
+      {...listeners}
     >
       <span className={`icon icon-${story.type}`}>{icon}</span>
       <span className="title">{story.title}</span>

@@ -122,6 +122,107 @@ describe("API: /api/stories/:id", () => {
   });
 });
 
+describe("API: PATCH /api/stories/:id (position)", () => {
+  test("updates position, returns updated story + new hash", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string; hash: string; position: string }[];
+    };
+    const target = list.stories[0]!;
+    expect(target.position).toBe("a0");
+
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ position: "a05" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok: true;
+      story: { id: string; position: string };
+      hash: string;
+    };
+    expect(body.ok).toBe(true);
+    expect(body.story.position).toBe("a05");
+    expect(body.hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(body.hash).not.toBe(target.hash);
+
+    const after = (await (await fetch(`${server.url}/api/stories/${target.id}`)).json()) as {
+      story: { position: string };
+    };
+    expect(after.story.position).toBe("a05");
+  });
+
+  test("returns 409 STALE_WRITE on hash mismatch", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const target = list.stories[0]!;
+
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ position: "a05", expectedHash: "deadbeef".repeat(8) }),
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: { kind: string } };
+    expect(body.error.kind).toBe("STALE_WRITE");
+  });
+
+  test("rejects unsupported fields with 400", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const target = list.stories[0]!;
+
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ points: 8 }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { kind: string; message: string } };
+    expect(body.error.kind).toBe("INVALID_FRONTMATTER");
+    expect(body.error.message).toContain("points");
+  });
+
+  test("rejects empty body with 400", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const target = list.stories[0]!;
+
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("rejects non-string position with 400", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const target = list.stories[0]!;
+
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ position: 42 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test("returns 404 for unknown story id", async () => {
+    const res = await fetch(`${server.url}/api/stories/9999`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ position: "a05" }),
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
 describe("API: POST /api/iteration/close", () => {
   async function transitionTo(id: string, verb: string) {
     const res = await fetch(`${server.url}/api/stories/${id}/transitions/${verb}`, {

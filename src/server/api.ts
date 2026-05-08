@@ -37,6 +37,7 @@ export type ApiContext = {
  *   GET    /api/stories
  *   GET    /api/stories/:id
  *   POST   /api/stories                         { type, title, points?, body? }
+ *   PATCH  /api/stories/:id                     { position?, expectedHash? }
  *   POST   /api/stories/:id/transitions/:verb   { reason? } for reject
  *   POST   /api/iteration/close                 { acceptedIds: string[] }
  *   GET    /api/events                          SSE stream
@@ -161,6 +162,92 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
       },
       201,
     );
+  }
+
+  // PATCH /api/stories/:id — partial frontmatter update. M1: position only.
+  // Future stories (T-1019 edit, T-1021 icebox) extend this with more fields.
+  const patchMatch = /^\/api\/stories\/([^/]+)$/.exec(pathname);
+  if (method === "PATCH" && patchMatch) {
+    const idQuery = patchMatch[1]!;
+
+    let reqBody: { position?: unknown; expectedHash?: unknown };
+    try {
+      reqBody = (await req.json()) as typeof reqBody;
+    } catch {
+      return json({ error: { kind: "INVALID_FRONTMATTER", message: "body is not JSON" } }, 400);
+    }
+
+    const allowed = new Set(["position", "expectedHash"]);
+    const unknownFields = Object.keys(reqBody).filter((k) => !allowed.has(k));
+    if (unknownFields.length > 0) {
+      return json(
+        {
+          error: {
+            kind: "INVALID_FRONTMATTER",
+            message: `unsupported fields: ${unknownFields.join(", ")} (M1 PATCH supports: position)`,
+          },
+        },
+        400,
+      );
+    }
+    if (reqBody.position === undefined) {
+      return json(
+        { error: { kind: "INVALID_FRONTMATTER", message: "patch requires at least one field" } },
+        400,
+      );
+    }
+    if (typeof reqBody.position !== "string" || reqBody.position.length === 0) {
+      return json(
+        { error: { kind: "INVALID_FRONTMATTER", message: "position must be a non-empty string" } },
+        400,
+      );
+    }
+    if (reqBody.expectedHash !== undefined && typeof reqBody.expectedHash !== "string") {
+      return json(
+        { error: { kind: "INVALID_FRONTMATTER", message: "expectedHash must be a string" } },
+        400,
+      );
+    }
+
+    const path = await findStoryPath({ storiesDir: project.storiesDir, query: idQuery });
+    if (!path.ok) {
+      const status = path.error.kind === "NOT_FOUND" ? 404 : 500;
+      return json({ error: path.error }, status);
+    }
+    const file = await readStoryFile(path.value);
+    if (!file.ok) return json({ error: file.error }, 500);
+
+    const updated = {
+      frontmatter: { ...file.value.story.frontmatter, position: reqBody.position },
+      body: file.value.story.body,
+    };
+    const written = await writeStoryAtomic({
+      path: file.value.path,
+      story: updated,
+      expectedHash: (reqBody.expectedHash as string | undefined) ?? file.value.hash,
+    });
+    if (!written.ok) {
+      const status = written.error.kind === "STALE_WRITE" ? 409 : 500;
+      return json({ error: written.error }, status);
+    }
+
+    if (watcher) watcher.markSelfWrite(file.value.path);
+    hub.broadcast({
+      type: "stories-changed",
+      path: file.value.path,
+      id: updated.frontmatter.id,
+    });
+
+    return json({
+      ok: true,
+      story: {
+        ...updated.frontmatter,
+        title: titleFromBody(updated.body),
+        body: updated.body,
+      },
+      path: file.value.path,
+      hash: written.value.hash,
+    });
   }
 
   const transitionMatch = /^\/api\/stories\/([^/]+)\/transitions\/(start|finish|deliver|accept|reject|restart)$/.exec(

@@ -5,7 +5,7 @@ id: T-1011-55d1
 labels: []
 points: 3
 position: aA
-state: unstarted
+state: delivered
 type: feature
 ---
 
