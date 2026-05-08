@@ -16,6 +16,7 @@ import {
 } from "./api.ts";
 import { computeBetween } from "./reorder.ts";
 import { Board } from "./components/Board.tsx";
+import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { IterationClosePanel } from "./components/IterationClosePanel.tsx";
 import { useKeyboard, type FocusState } from "./keyboard.ts";
 import { deriveColumns } from "./columns.ts";
@@ -58,6 +59,7 @@ export function App() {
   const [focus, setFocus] = useState<FocusState>({ focusedId: null, expandedId: null });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [lastClosed, setLastClosed] = useState<IterationClosedEvent | null>(null);
@@ -190,13 +192,14 @@ export function App() {
     onDelete: handleDelete,
     onToggleIcebox: handleToggleIcebox,
     onMove: handleMove,
-    enabled: !panelOpen && editingId === null && !creating,
+    enabled: !panelOpen && editingId === null && !creating && !helpOpen,
   });
 
-  // Listen for the panel-open keybind ('I' = shift+i) and 'n' to open the
-  // new-story form. These bypass the row-level keyboard handler.
+  // Listen for the panel-open keybind ('I' = shift+i), 'n' to open the
+  // new-story form, and '?' for the help overlay. These bypass the row-level
+  // keyboard handler.
   useEffect(() => {
-    if (panelOpen || editingId !== null || creating) return;
+    if (panelOpen || editingId !== null || creating || helpOpen) return;
     const handler = (e: KeyboardEvent) => {
       const tgt = e.target;
       if (
@@ -214,11 +217,16 @@ export function App() {
       if (e.key === "n" && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         setCreating(true);
+        return;
+      }
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        setHelpOpen(true);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [panelOpen, editingId, creating]);
+  }, [panelOpen, editingId, creating, helpOpen]);
 
   // If the focused story disappears (e.g. moved to a column we don't display),
   // clear focus so the next j/k starts from the top.
@@ -306,6 +314,7 @@ export function App() {
             isCommitting={closeIter.isPending}
           />
         )}
+        {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
       </div>
       <StatusBar
         ritualNote={
@@ -391,6 +400,9 @@ function StatusBar({ ritualNote }: { ritualNote?: string | null } = {}) {
       <span className="sep">·</span>
       <span>I</span>
       <span>close iteration</span>
+      <span className="sep">·</span>
+      <span>?</span>
+      <span>help</span>
       <span className="sep">·</span>
       <span>esc</span>
       <span>collapse</span>
