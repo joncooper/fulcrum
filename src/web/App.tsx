@@ -15,6 +15,7 @@ import {
   type TransitionVerb,
 } from "./api.ts";
 import { computeBetween } from "./reorder.ts";
+import { useStoryDeepLink } from "./deeplink.ts";
 import { Board } from "./components/Board.tsx";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { IterationClosePanel } from "./components/IterationClosePanel.tsx";
@@ -74,6 +75,7 @@ export function App() {
   }, []);
 
   useSseInvalidator({ onIterationClosed: handleIterationClosed });
+  useStoryDeepLink({ stories: stories.data ?? [], focus, setFocus });
 
   // Apply search filter before deriving columns so j/k navigation only walks
   // matching stories.

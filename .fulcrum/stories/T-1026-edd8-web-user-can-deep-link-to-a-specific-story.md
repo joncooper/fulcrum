@@ -5,7 +5,7 @@ id: T-1026-edd8
 labels: []
 points: 2
 position: aP
-state: unstarted
+state: delivered
 type: feature
 ---
 
