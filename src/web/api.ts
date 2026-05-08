@@ -24,6 +24,8 @@ export type ProjectDto = {
   name: string;
   velocity: number;
   current_iteration: number;
+  iteration_start_date: string;
+  iteration_length_days: number;
   settings: { estimate_scale: number[] };
 };
 

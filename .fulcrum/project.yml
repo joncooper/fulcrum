@@ -1,4 +1,6 @@
 current_iteration: 1
+iteration_length_days: 7
+iteration_start_date: 2026-05-08
 name: fulcrum
 settings:
   estimate_scale:

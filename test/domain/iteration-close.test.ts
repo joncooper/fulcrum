@@ -12,6 +12,8 @@ const project = (current_iteration: number, velocity = 0): Project => ({
   name: "test",
   velocity,
   current_iteration,
+  iteration_start_date: "2026-05-01",
+  iteration_length_days: 7,
   settings: { estimate_scale: [0, 1, 2, 3, 5, 8] },
 });
 

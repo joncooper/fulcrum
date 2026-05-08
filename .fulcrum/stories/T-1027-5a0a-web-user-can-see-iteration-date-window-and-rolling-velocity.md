@@ -5,7 +5,7 @@ id: T-1027-5a0a
 labels: []
 points: 3
 position: aQ
-state: unstarted
+state: delivered
 type: feature
 ---
 

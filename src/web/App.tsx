@@ -16,6 +16,7 @@ import {
 } from "./api.ts";
 import { computeBetween } from "./reorder.ts";
 import { useStoryDeepLink } from "./deeplink.ts";
+import { formatIsoDate, iterationWindow } from "./iteration-window.ts";
 import { Board } from "./components/Board.tsx";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { IterationClosePanel } from "./components/IterationClosePanel.tsx";
@@ -305,7 +306,7 @@ export function App() {
     <>
       <Header
         projectName={project.data.name}
-        iteration={`Iteration ${project.data.current_iteration}`}
+        iteration={iterationLabel(project.data)}
         velocity={`velocity ${project.data.velocity} pts`}
         theme={theme}
         onToggleTheme={toggle}
@@ -355,6 +356,15 @@ export function App() {
       />
     </>
   );
+}
+
+function iterationLabel(project: {
+  current_iteration: number;
+  iteration_start_date: string;
+  iteration_length_days: number;
+}): string {
+  const { start, end } = iterationWindow(project);
+  return `Iteration ${project.current_iteration} · ${formatIsoDate(start)} → ${formatIsoDate(end)}`;
 }
 
 function Header({

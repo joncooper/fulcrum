@@ -108,6 +108,9 @@ export function closeIteration(
     ...project,
     current_iteration: closing + 1,
     velocity: newVelocity,
+    // Roll the iteration window forward to today on close (PT-style: a fresh
+    // iteration starts when you close the previous one).
+    iteration_start_date: new Date().toISOString().slice(0, 10),
   };
 
   return ok({

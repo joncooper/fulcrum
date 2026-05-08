@@ -52,6 +52,8 @@ export async function initProject(
       name: opts.name,
       velocity: 0,
       current_iteration: 1,
+      iteration_start_date: new Date().toISOString().slice(0, 10),
+      iteration_length_days: 7,
       settings: {},
     });
   } catch (cause) {
