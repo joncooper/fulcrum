@@ -76,10 +76,11 @@ export async function allocateId(
 
 /** Build a regenerated id (same sequence, fresh suffix) for retry on EEXIST. */
 export function regenerateSuffix(prev: AllocatedId): AllocatedId {
+  const suffix = generateRandomSuffix();
   return {
-    fullId: `T-${prev.sequence}-${generateRandomSuffix()}`,
+    fullId: `T-${prev.sequence}-${suffix}`,
     sequence: prev.sequence,
-    suffix: generateRandomSuffix(),
+    suffix,
   };
 }
 
