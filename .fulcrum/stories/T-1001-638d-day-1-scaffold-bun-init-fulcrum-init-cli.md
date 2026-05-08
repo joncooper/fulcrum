@@ -4,7 +4,7 @@ icebox: false
 id: T-1001-638d
 labels: []
 position: a0
-state: delivered
+state: accepted
 type: chore
 ---
 
