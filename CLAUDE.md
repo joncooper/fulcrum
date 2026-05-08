@@ -54,3 +54,23 @@ file globs. The brain auto-syncs incrementally on every gstack skill start.
 Run `/sync-gbrain` to force-refresh, `/sync-gbrain --full` for full reindex.
 
 <!-- gstack-gbrain-search-guidance:end -->
+
+## Design System
+Always read `DESIGN.md` before making any visual or UI decisions.
+All font choices, colors, spacing, layout, and aesthetic direction are defined there.
+Do not deviate without explicit user approval.
+
+Visual thesis: vintage Pivotal Tracker density on 2026 displays. IBM Plex family
+typography. Warm-paper canvas with PT-saturated column tints (Current=yellow,
+Backlog=sky, Icebox=lavender) as load-bearing semantic landmarks. NO story IDs
+shown visually on the board — they are CLI/URL identifiers only. Row height
+24-28px (PT-class density). Mobile is a read-only fallback; M1 is desktop-first.
+
+When implementing UI:
+- Self-host IBM Plex via `@fontsource/ibm-plex-{sans,serif,mono}` (no CDN).
+- Use the CSS variables defined in `DESIGN.md` (do not hardcode hex values).
+- Story row anatomy: `[type icon] [title] [points] [state pill]` — no ID column.
+- State pills use lowercase mono labels; type icons use Unicode glyphs (★ ● ⚙ ▼).
+- Motion is minimal-functional (0/80/100/150ms); no spring physics, no entrance animations.
+
+In QA mode, flag any code that doesn't match `DESIGN.md`.
