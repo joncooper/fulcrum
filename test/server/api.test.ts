@@ -122,6 +122,100 @@ describe("API: /api/stories/:id", () => {
   });
 });
 
+describe("API: POST /api/iteration/close", () => {
+  async function transitionTo(id: string, verb: string) {
+    const res = await fetch(`${server.url}/api/stories/${id}/transitions/${verb}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`transition ${verb} ${id} failed: ${res.status} ${body}`);
+    }
+  }
+
+  test("empty acceptedIds → bumps iteration, no stamped stories, velocity_actual 0", async () => {
+    const res = await fetch(`${server.url}/api/iteration/close`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ acceptedIds: [] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, any>;
+    expect(body.ok).toBe(true);
+    expect(body.closed_iteration).toBe(1);
+    expect(body.next_iteration).toBe(2);
+    expect(body.velocity_actual).toBe(0);
+    expect(body.accepted_ids).toEqual([]);
+
+    const proj = (await (await fetch(`${server.url}/api/project`)).json()) as {
+      project: { current_iteration: number };
+    };
+    expect(proj.project.current_iteration).toBe(2);
+  });
+
+  test("close with one delivered story → story stamped + accepted, project bumped, velocity recomputed", async () => {
+    await transitionTo("1001", "deliver"); // unstarted → delivered (auto-chain)
+
+    const res = await fetch(`${server.url}/api/iteration/close`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ acceptedIds: ["1001"] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, any>;
+    expect(body.ok).toBe(true);
+    expect(body.closed_iteration).toBe(1);
+    expect(body.next_iteration).toBe(2);
+    expect(body.velocity_actual).toBe(3); // first story has 3 points
+    expect(body.velocity_next).toBe(3);
+    expect(body.accepted_ids).toHaveLength(1);
+
+    const story = (await (await fetch(`${server.url}/api/stories/1001`)).json()) as {
+      story: { state: string; iteration: number };
+    };
+    expect(story.story.state).toBe("accepted");
+    expect(story.story.iteration).toBe(1);
+  });
+
+  test("non-existent story id → 404", async () => {
+    const res = await fetch(`${server.url}/api/iteration/close`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ acceptedIds: ["T-9999-aaaa"] }),
+    });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: { kind: string } };
+    expect(body.error.kind).toBe("NOT_FOUND");
+  });
+
+  test("non-delivered story → 409 INVALID_TRANSITION", async () => {
+    // 1001 is currently unstarted (no transitions in this test)
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const fullId = list.stories[0]!.id;
+    const res = await fetch(`${server.url}/api/iteration/close`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ acceptedIds: [fullId] }),
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: { kind: string } };
+    expect(body.error.kind).toBe("INVALID_TRANSITION");
+  });
+
+  test("missing acceptedIds → 400", async () => {
+    const res = await fetch(`${server.url}/api/iteration/close`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("API: unknown routes", () => {
   test("returns 404 for unknown /api/ path", async () => {
     const res = await fetch(`${server.url}/api/nonexistent`);

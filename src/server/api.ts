@@ -1,4 +1,4 @@
-import { loadProject, type ProjectRoot } from "../domain/io/project.ts";
+import { loadProject, writeProjectAtomic, type ProjectRoot } from "../domain/io/project.ts";
 import {
   createStory,
   findStoryPath,
@@ -6,7 +6,9 @@ import {
   readStoryFile,
   writeStoryAtomic,
 } from "../domain/io/stories.ts";
+import { closeIteration } from "../domain/iteration-close.ts";
 import { between } from "../domain/position.ts";
+import { idMatches } from "../domain/schemas/story.ts";
 import { transition, type Command } from "../domain/state-machine.ts";
 import type { SseHub } from "./sse.ts";
 import type { FileWatcher } from "./file-watcher.ts";
@@ -36,6 +38,7 @@ export type ApiContext = {
  *   GET    /api/stories/:id
  *   POST   /api/stories                         { type, title, points?, body? }
  *   POST   /api/stories/:id/transitions/:verb   { reason? } for reject
+ *   POST   /api/iteration/close                 { acceptedIds: string[] }
  *   GET    /api/events                          SSE stream
  */
 export async function handleApi(req: Request, ctx: ApiContext): Promise<Response> {
@@ -234,6 +237,133 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
       },
       path: file.value.path,
       hash: written.value.hash,
+    });
+  }
+
+  if (method === "POST" && pathname === "/api/iteration/close") {
+    let reqBody: { acceptedIds?: unknown };
+    try {
+      reqBody = (await req.json()) as typeof reqBody;
+    } catch {
+      return json({ error: { kind: "INVALID_FRONTMATTER", message: "body is not JSON" } }, 400);
+    }
+    const acceptedIds = reqBody.acceptedIds;
+    if (!Array.isArray(acceptedIds) || !acceptedIds.every((x) => typeof x === "string")) {
+      return json(
+        { error: { kind: "INVALID_FRONTMATTER", message: "acceptedIds must be string[]" } },
+        400,
+      );
+    }
+
+    const projResult = loadProject(project);
+    if (!projResult.ok) return json({ error: projResult.error }, 500);
+
+    const list = await listStories(project.storiesDir);
+    if (!list.ok) return json({ error: list.error }, 500);
+
+    // Build a path map keyed by story id so we can write changes atomically with
+    // CAS-on-hash (the original hash from the freshly-read story file).
+    const loadedById = new Map(
+      list.value.stories.map((s) => [s.story.frontmatter.id, s] as const),
+    );
+    const allIds = list.value.stories.map((s) => s.story.frontmatter.id);
+
+    // Resolve callers' partial ids ("1001" or "T-1001") to full ids before
+    // handing them to the domain layer. NOT_FOUND on miss; AMBIGUOUS_ID on
+    // multiple matches — same semantics as findStoryPath for /transitions/.
+    const resolvedIds: string[] = [];
+    for (const q of acceptedIds) {
+      const matches = allIds.filter((full) => idMatches(q, full));
+      if (matches.length === 0) {
+        return json(
+          { error: { kind: "NOT_FOUND", message: `no story matches ${JSON.stringify(q)}` } },
+          404,
+        );
+      }
+      if (matches.length > 1) {
+        return json(
+          {
+            error: {
+              kind: "AMBIGUOUS_ID",
+              message: `${matches.length} stories match ${JSON.stringify(q)}: ${matches.join(", ")}`,
+            },
+          },
+          409,
+        );
+      }
+      resolvedIds.push(matches[0]!);
+    }
+
+    const closeResult = closeIteration({
+      project: projResult.value,
+      stories: list.value.stories.map((s) => s.story),
+      acceptedIds: resolvedIds,
+    });
+    if (!closeResult.ok) {
+      const status =
+        closeResult.error.kind === "NOT_FOUND"
+          ? 404
+          : closeResult.error.kind === "INVALID_TRANSITION"
+            ? 409
+            : 500;
+      return json({ error: closeResult.error }, status);
+    }
+
+    // Persist each changed story (CAS-on-hash so concurrent edits surface as STALE_WRITE).
+    const writtenIds: string[] = [];
+    for (const updated of closeResult.value.changed) {
+      const loaded = loadedById.get(updated.frontmatter.id);
+      if (!loaded) {
+        return json(
+          {
+            error: {
+              kind: "NOT_FOUND",
+              message: `internal: changed story ${updated.frontmatter.id} not in loaded set`,
+            },
+          },
+          500,
+        );
+      }
+      const written = await writeStoryAtomic({
+        path: loaded.path,
+        story: updated,
+        expectedHash: loaded.hash,
+      });
+      if (!written.ok) {
+        const status = written.error.kind === "STALE_WRITE" ? 409 : 500;
+        return json({ error: written.error }, status);
+      }
+      if (watcher) watcher.markSelfWrite(loaded.path);
+      writtenIds.push(updated.frontmatter.id);
+    }
+
+    // Persist the new project.yml (bumped iteration + recomputed velocity).
+    const projWritten = await writeProjectAtomic(project, closeResult.value.project);
+    if (!projWritten.ok) return json({ error: projWritten.error }, 500);
+    if (watcher) watcher.markSelfWrite(project.projectFile);
+
+    const closingIteration = projResult.value.current_iteration;
+    hub.broadcast({
+      type: "iteration-closed",
+      data: {
+        closed_iteration: closingIteration,
+        next_iteration: closeResult.value.project.current_iteration,
+        velocity_actual: closeResult.value.velocity_actual,
+        velocity_next: closeResult.value.project.velocity,
+        accepted_ids: writtenIds,
+        spilled_count: closeResult.value.spilled.length,
+      },
+    });
+
+    return json({
+      ok: true,
+      closed_iteration: closingIteration,
+      next_iteration: closeResult.value.project.current_iteration,
+      velocity_actual: closeResult.value.velocity_actual,
+      velocity_next: closeResult.value.project.velocity,
+      accepted_ids: writtenIds,
+      spilled_count: closeResult.value.spilled.length,
+      project: closeResult.value.project,
     });
   }
 

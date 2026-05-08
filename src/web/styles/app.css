@@ -44,6 +44,19 @@ body {
   font-size: 12px;
   opacity: 0.7;
 }
+.app-header .iter-button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--header-ink);
+  font: inherit;
+  padding: 2px 8px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.app-header .iter-button:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  opacity: 1;
+}
 .app-header .vel {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -315,6 +328,221 @@ body {
 }
 .error {
   color: var(--state-rejected-ink);
+}
+
+/* ─── BOARD SHELL + ITERATION CLOSE RITUAL (the named 400ms motion exception) ─── */
+.board-shell {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.board-shell[data-closing="true"] .board {
+  animation: iter-close 400ms ease-in-out;
+}
+@keyframes iter-close {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  45% {
+    opacity: 0.15;
+    transform: translateY(-10px);
+  }
+  55% {
+    opacity: 0.15;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-shell[data-closing="true"] .board {
+    animation: none;
+  }
+}
+
+/* ─── ITERATION CLOSE PANEL ─── */
+.iter-close-panel {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-app);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+.iter-close-header {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  background: var(--col-current);
+  border-bottom: 1px solid var(--rule);
+  flex-shrink: 0;
+}
+.iter-close-title {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--ink-primary);
+}
+.iter-close-summary {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-secondary);
+  margin-left: auto;
+}
+.iter-close-section {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--rule);
+}
+.iter-close-section:last-of-type {
+  border-bottom: 0;
+}
+.iter-close-section-header {
+  position: sticky;
+  top: 0;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--rule);
+  padding: 4px 16px;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--ink-secondary);
+  z-index: 1;
+}
+.iter-close-section-empty {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.iter-close-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.iter-close-row {
+  display: grid;
+  grid-template-columns: 18px 16px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 16px;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.iter-close-row:hover {
+  background: rgba(0, 0, 0, 0.025);
+}
+[data-theme="dark"] .iter-close-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.iter-close-row.is-focused {
+  outline: 2px solid var(--type-feature);
+  outline-offset: -2px;
+}
+.iter-close-row.is-spill {
+  cursor: default;
+  background: var(--col-backlog);
+}
+.iter-close-row.is-spill:hover {
+  background: var(--col-backlog);
+}
+.iter-close-check {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-secondary);
+  text-align: center;
+}
+.iter-close-row.is-accepted .iter-close-check {
+  color: var(--state-accepted-ink);
+}
+.iter-close-row .title {
+  color: var(--ink-primary);
+}
+.iter-close-row .pts {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-secondary);
+}
+.iter-close-empty {
+  padding: 24px;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+.iter-close-empty .hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+.iter-close-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--rule);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+.iter-close-tally {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--ink-primary);
+}
+.iter-close-tally strong {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+.iter-close-keys {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+  margin-left: auto;
+}
+.iter-close-keys kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg-app);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 0 4px;
+  margin: 0 2px;
+  color: var(--ink-secondary);
+}
+.iter-close-commit {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  background: var(--ink-primary);
+  color: var(--bg-app);
+  border: 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.iter-close-commit:hover:not(:disabled) {
+  opacity: 0.85;
+}
+.iter-close-commit:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* Status-bar variant shown briefly during the close ritual. */
+.status-bar.status-bar-ritual {
+  background: var(--col-current);
+  color: var(--ink-primary);
+  font-family: var(--font-body);
+  font-size: 12px;
+  justify-content: center;
 }
 
 /* ─── DARK TOGGLE (lives in header) ─── */

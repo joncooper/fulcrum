@@ -19,10 +19,13 @@ export function useKeyboard(opts: {
   focus: FocusState;
   setFocus: (next: FocusState) => void;
   onTransition: (id: string, verb: TransitionVerb, reason?: string) => void;
+  /** When false, the global handler is detached (e.g. while a modal panel owns input). */
+  enabled?: boolean;
 }) {
-  const { stories, focus, setFocus, onTransition } = opts;
+  const { stories, focus, setFocus, onTransition, enabled = true } = opts;
 
   useEffect(() => {
+    if (!enabled) return;
     const handler = (e: KeyboardEvent) => {
       // Ignore when typing in inputs/textareas.
       const tgt = e.target;
@@ -82,5 +85,5 @@ export function useKeyboard(opts: {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [stories, focus, setFocus, onTransition]);
+  }, [stories, focus, setFocus, onTransition, enabled]);
 }

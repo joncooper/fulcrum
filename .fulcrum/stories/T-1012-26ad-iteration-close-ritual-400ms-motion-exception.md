@@ -5,7 +5,7 @@ id: T-1012-26ad
 labels: []
 points: 5
 position: aB
-state: unstarted
+state: delivered
 type: feature
 ---
 

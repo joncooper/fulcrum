@@ -101,24 +101,75 @@ export function useTransitionStory() {
   });
 }
 
+export type IterationClosedEvent = {
+  closed_iteration: number;
+  next_iteration: number;
+  velocity_actual: number;
+  velocity_next: number;
+  accepted_ids: string[];
+  spilled_count: number;
+};
+
 /**
  * Subscribe to /api/events and invalidate react-query caches on any event.
  * Per plan: full cache invalidation on every event keeps server stateless and
  * client correctness total. EventSource handles auto-reconnect natively.
+ *
+ * `onIterationClosed` fires for the named 400ms iteration-close motion
+ * exception — App.tsx uses it to flip a data attribute so the board animates
+ * the close ritual. The cache is invalidated as part of this same event.
  */
-export function useSseInvalidator() {
+export function useSseInvalidator(opts: {
+  onIterationClosed?: (event: IterationClosedEvent) => void;
+} = {}) {
   const qc = useQueryClient();
+  const { onIterationClosed } = opts;
   useEffect(() => {
     const es = new EventSource("/api/events");
     const handleAny = () => {
       qc.invalidateQueries({ queryKey: ["stories"] });
       qc.invalidateQueries({ queryKey: ["project"] });
     };
+    const handleIterationClosed = (e: MessageEvent) => {
+      handleAny();
+      try {
+        const parsed = JSON.parse(e.data) as IterationClosedEvent;
+        onIterationClosed?.(parsed);
+      } catch {
+        /* malformed event payload — invalidation already happened */
+      }
+    };
     es.addEventListener("stories-changed", handleAny);
     es.addEventListener("story-transitioned", handleAny);
     es.addEventListener("story-removed", handleAny);
+    es.addEventListener("iteration-closed", handleIterationClosed);
     return () => {
       es.close();
     };
-  }, [qc]);
+  }, [qc, onIterationClosed]);
+}
+
+export function useCloseIteration() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { acceptedIds: string[] }): Promise<IterationClosedEvent> => {
+      const res = await fetch("/api/iteration/close", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ acceptedIds: vars.acceptedIds }),
+      });
+      const body = (await res.json()) as
+        | (IterationClosedEvent & { ok: true })
+        | { ok?: false; error: { kind: string; message: string } };
+      if (!res.ok || !("ok" in body) || body.ok !== true) {
+        const err = "error" in body ? body.error : null;
+        throw new Error(err?.message ?? `close iteration failed: ${res.status}`);
+      }
+      return body;
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["stories"] });
+      qc.invalidateQueries({ queryKey: ["project"] });
+    },
+  });
 }

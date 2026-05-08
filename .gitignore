@@ -9,3 +9,4 @@ coverage
 .gstack/
 bun.lock
 .fulcrum/.cache/
+.claude/
