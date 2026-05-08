@@ -5,49 +5,51 @@ export type Column = "current" | "backlog" | "icebox" | "done";
 export type ColumnMap = Record<Column, StoryDto[]>;
 
 /**
- * Column derivation per plan: iteration is a PROJECTION over velocity + position.
+ * Column derivation — corrected mental model:
  *
- * - `done` = stories with `iteration` field set (accepted in a closed iteration)
- * - `icebox` = stories with `icebox: true`
- * - Of the rest, sliced by velocity:
- *     - `current` = first `velocity` points
- *     - `backlog` = the remainder
+ *   - `done`    = stories with `iteration` field stamped (a closed iteration)
+ *   - `icebox`  = stories with `icebox: true`
+ *   - `current` = stories with state in {started, finished, delivered}
+ *                 — i.e. work that's *in flight*. PT-style "what am I on right now."
+ *   - `backlog` = stories with state in {unstarted, rejected}
+ *                 — not yet begun (rejected is reusable; restart drops it back here).
  *
- * Stories with no points (bug/chore/release) count as 0 and always fit.
+ * Velocity is NOT a column-slicer; it's a pace metric (rolling avg of past
+ * closed iterations) shown in the header for planning judgement, but the
+ * board layout is determined by *story state*, not by some computed cap.
+ *
+ * Within each column, stories are ordered by their Lexorank `position` field.
  */
-export function deriveColumns(stories: StoryDto[], project: ProjectDto): ColumnMap {
-  const done: StoryDto[] = [];
-  const icebox: StoryDto[] = [];
-  const inProjection: StoryDto[] = [];
-
-  for (const s of stories) {
-    if (s.iteration !== undefined) done.push(s);
-    else if (s.icebox) icebox.push(s);
-    else inProjection.push(s);
-  }
-  inProjection.sort((a, b) => (a.position < b.position ? -1 : 1));
-  done.sort((a, b) => (b.iteration ?? 0) - (a.iteration ?? 0));
-
-  // Slice in-projection stream into current chunk by velocity.
-  const velocity = project.velocity;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function deriveColumns(stories: StoryDto[], _project: ProjectDto): ColumnMap {
   const current: StoryDto[] = [];
   const backlog: StoryDto[] = [];
-  if (velocity <= 0) {
-    // No iteration capacity defined yet — treat everything as backlog so the
-    // user's first interaction is "raise velocity to fill the current column."
-    backlog.push(...inProjection);
-  } else {
-    let acc = 0;
-    for (const s of inProjection) {
-      const points = s.points ?? 0;
-      if (acc + points <= velocity) {
-        current.push(s);
-        acc += points;
-      } else {
-        backlog.push(s);
-      }
+  const icebox: StoryDto[] = [];
+  const done: StoryDto[] = [];
+
+  for (const s of stories) {
+    if (s.iteration !== undefined) {
+      done.push(s);
+      continue;
     }
+    if (s.icebox) {
+      icebox.push(s);
+      continue;
+    }
+    if (s.state === "started" || s.state === "finished" || s.state === "delivered") {
+      current.push(s);
+      continue;
+    }
+    // unstarted, rejected → backlog
+    backlog.push(s);
   }
+
+  const byPosition = (a: StoryDto, b: StoryDto) => (a.position < b.position ? -1 : 1);
+  current.sort(byPosition);
+  backlog.sort(byPosition);
+  icebox.sort(byPosition);
+  // Done is sorted by iteration (most recent first) so the most-recent close lands at the top.
+  done.sort((a, b) => (b.iteration ?? 0) - (a.iteration ?? 0));
 
   return { current, backlog, icebox, done };
 }
