@@ -5,7 +5,7 @@ id: T-1008-d582
 labels: []
 points: 8
 position: a7
-state: unstarted
+state: delivered
 type: feature
 ---
 

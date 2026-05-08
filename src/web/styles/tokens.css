@@ -1,0 +1,90 @@
+/*
+ * fulcrum design tokens — DESIGN.md as CSS custom properties.
+ * Kept in sync with /Users/jdc/conductor/workspaces/fulcrum/belo-horizonte/DESIGN.md
+ * and the live HTML reference at
+ * ~/.gstack/projects/joncooper-fulcrum/designs/design-system-20260507/preview.html
+ */
+
+@import "@fontsource/ibm-plex-serif/400.css";
+@import "@fontsource/ibm-plex-serif/500.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+:root {
+  /* DAY (default) */
+  --bg-app: #fbf8f1;
+  --bg-surface: #f5efde;
+  --ink-primary: #1c1917;
+  --ink-secondary: #57534e;
+  --ink-muted: #a8a29e;
+  --rule: #e7e0c9;
+
+  /* Column tints — PT-saturated semantic landmarks */
+  --col-current: #fef9c3;
+  --col-backlog: #cce3fb;
+  --col-icebox: #dde2fa;
+  --col-done: #c5f0d3;
+
+  /* Story type accents */
+  --type-feature: #d97706;
+  --type-bug: #9f1239;
+  --type-chore: #57534e;
+  --type-release: #5b21b6;
+
+  /* State pills (low chroma) */
+  --state-started-bg: #bbf7d0;
+  --state-started-ink: #166534;
+  --state-finished-bg: #fde68a;
+  --state-finished-ink: #854d0e;
+  --state-delivered-bg: #bfdbfe;
+  --state-delivered-ink: #1e40af;
+  --state-accepted-bg: #d9f99d;
+  --state-accepted-ink: #365314;
+  --state-rejected-bg: #fecaca;
+  --state-rejected-ink: #991b1b;
+
+  /* Header */
+  --header-bg: var(--ink-primary);
+  --header-ink: var(--bg-app);
+
+  /* Fonts */
+  --font-display: "IBM Plex Serif", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+
+[data-theme="dark"] {
+  --bg-app: #1c1917;
+  --bg-surface: #292524;
+  --ink-primary: #fbf8f1;
+  --ink-secondary: #d6d3d1;
+  --ink-muted: #78716c;
+  --rule: #44403c;
+
+  --col-current: #3f3711;
+  --col-backlog: #1e293b;
+  --col-icebox: #312e81;
+  --col-done: #14532d;
+
+  --type-feature: #f59e0b;
+  --type-bug: #fb7185;
+  --type-chore: #a8a29e;
+  --type-release: #a78bfa;
+
+  --state-started-bg: #14532d;
+  --state-started-ink: #bbf7d0;
+  --state-finished-bg: #78350f;
+  --state-finished-ink: #fde68a;
+  --state-delivered-bg: #1e3a8a;
+  --state-delivered-ink: #bfdbfe;
+  --state-accepted-bg: #365314;
+  --state-accepted-ink: #d9f99d;
+  --state-rejected-bg: #7f1d1d;
+  --state-rejected-ink: #fecaca;
+
+  --header-bg: #0c0a09;
+  --header-ink: var(--ink-primary);
+}

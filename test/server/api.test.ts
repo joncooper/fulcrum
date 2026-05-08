@@ -28,7 +28,8 @@ beforeEach(async () => {
   });
   const proj = findProjectRoot(cwd);
   if (!proj) throw new Error("setup: project not found");
-  server = startServer({ port: 0, project: proj });
+  // webDist: null skips the static-asset path so tests focus on the API.
+  server = startServer({ port: 0, project: proj, webDist: null });
 });
 
 afterEach(async () => {
@@ -127,7 +128,7 @@ describe("API: unknown routes", () => {
     expect(res.status).toBe(404);
   });
 
-  test("/ returns the placeholder landing page (text/html)", async () => {
+  test("/ returns the fallback landing page when no web build is present", async () => {
     const res = await fetch(`${server.url}/`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
@@ -136,7 +137,7 @@ describe("API: unknown routes", () => {
     expect(text).toContain("/api/stories");
   });
 
-  test("non-/api non-/ returns 404", async () => {
+  test("non-/api non-/ returns 404 when no web build is present", async () => {
     const res = await fetch(`${server.url}/some/random/thing`);
     expect(res.status).toBe(404);
   });
