@@ -92,6 +92,22 @@ export function App() {
 
   const handleCancelCreate = useCallback(() => setCreating(false), []);
 
+  const handleToggleIcebox = useCallback(
+    (id: string) => {
+      const story = flat.find((s) => s.id === id);
+      if (!story) return;
+      // Schema forbids icebox on terminal states (accepted, rejected) — skip
+      // silently rather than firing a request that will 400.
+      if (story.state === "accepted" || story.state === "rejected") return;
+      updateStory.mutate({
+        id,
+        patch: { icebox: !story.icebox },
+        expectedHash: story.hash,
+      });
+    },
+    [flat, updateStory],
+  );
+
   const handleDelete = useCallback(
     (id: string) => {
       const story = flat.find((s) => s.id === id);
@@ -145,6 +161,7 @@ export function App() {
     onTransition: handleTransition,
     onEdit: handleStartEdit,
     onDelete: handleDelete,
+    onToggleIcebox: handleToggleIcebox,
     enabled: !panelOpen && editingId === null && !creating,
   });
 
@@ -334,6 +351,9 @@ function StatusBar({ ritualNote }: { ritualNote?: string | null } = {}) {
       <span className="sep">·</span>
       <span>r</span>
       <span>reject</span>
+      <span className="sep">·</span>
+      <span>i</span>
+      <span>icebox</span>
       <span className="sep">·</span>
       <span>D</span>
       <span>delete</span>

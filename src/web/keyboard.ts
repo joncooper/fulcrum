@@ -23,10 +23,21 @@ export function useKeyboard(opts: {
   onEdit?: (id: string) => void;
   /** Delete the focused story after confirmation (called for the `D` keystroke). */
   onDelete?: (id: string) => void;
+  /** Toggle icebox on the focused story (called for the `i` keystroke). */
+  onToggleIcebox?: (id: string) => void;
   /** When false, the global handler is detached (e.g. while a modal panel owns input). */
   enabled?: boolean;
 }) {
-  const { stories, focus, setFocus, onTransition, onEdit, onDelete, enabled = true } = opts;
+  const {
+    stories,
+    focus,
+    setFocus,
+    onTransition,
+    onEdit,
+    onDelete,
+    onToggleIcebox,
+    enabled = true,
+  } = opts;
 
   useEffect(() => {
     if (!enabled) return;
@@ -97,9 +108,14 @@ export function useKeyboard(opts: {
       if (e.key === "D" && focus.focusedId && onDelete) {
         e.preventDefault();
         onDelete(focus.focusedId);
+        return;
+      }
+      if (e.key === "i" && focus.focusedId && onToggleIcebox) {
+        e.preventDefault();
+        onToggleIcebox(focus.focusedId);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [stories, focus, setFocus, onTransition, onEdit, onDelete, enabled]);
+  }, [stories, focus, setFocus, onTransition, onEdit, onDelete, onToggleIcebox, enabled]);
 }

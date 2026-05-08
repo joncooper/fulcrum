@@ -5,7 +5,7 @@ id: T-1021-180a
 labels: []
 points: 2
 position: aK
-state: unstarted
+state: delivered
 type: feature
 ---
 
