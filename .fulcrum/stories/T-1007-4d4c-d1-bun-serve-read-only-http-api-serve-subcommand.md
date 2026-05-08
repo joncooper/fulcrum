@@ -5,7 +5,7 @@ id: T-1007-4d4c
 labels: []
 points: 3
 position: a6
-state: unstarted
+state: delivered
 type: feature
 ---
 

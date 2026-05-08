@@ -27,16 +27,14 @@ beforeEach(() => {
   stdoutChunks = [];
   stderrChunks = [];
   // Capture writes
-  // @ts-expect-error - we deliberately replace with a spy
-  process.stdout.write = (chunk: string | Uint8Array, ...rest: unknown[]): boolean => {
+  process.stdout.write = ((chunk: string | Uint8Array): boolean => {
     stdoutChunks.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
-    return origStdoutWrite(chunk as string, ...(rest as []));
-  };
-  // @ts-expect-error - we deliberately replace with a spy
-  process.stderr.write = (chunk: string | Uint8Array, ...rest: unknown[]): boolean => {
+    return origStdoutWrite(chunk as string);
+  }) as typeof process.stdout.write;
+  process.stderr.write = ((chunk: string | Uint8Array): boolean => {
     stderrChunks.push(typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk));
-    return origStderrWrite(chunk as string, ...(rest as []));
-  };
+    return origStderrWrite(chunk as string);
+  }) as typeof process.stderr.write;
 });
 
 afterEach(() => {

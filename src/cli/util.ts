@@ -1,63 +1,12 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import YAML from "yaml";
-import { err, ok, type FulcrumError, type Result } from "../domain/result.ts";
-import { ProjectSchema, type Project } from "../domain/schemas/project.ts";
+import type { FulcrumError } from "../domain/result.ts";
 
-export type ProjectRoot = {
-  /** Absolute path to the directory containing `.fulcrum/`. */
-  root: string;
-  fulcrumDir: string;
-  storiesDir: string;
-  projectFile: string;
-};
-
-/** Walk up from `start` looking for `.fulcrum/project.yml`. Like git's repo discovery. */
-export function findProjectRoot(start = process.cwd()): ProjectRoot | null {
-  let cur = resolve(start);
-  while (true) {
-    const fulcrumDir = join(cur, ".fulcrum");
-    if (existsSync(join(fulcrumDir, "project.yml"))) {
-      return {
-        root: cur,
-        fulcrumDir,
-        storiesDir: join(fulcrumDir, "stories"),
-        projectFile: join(fulcrumDir, "project.yml"),
-      };
-    }
-    const parent = dirname(cur);
-    if (parent === cur) return null;
-    cur = parent;
-  }
-}
-
-export function loadProject(p: ProjectRoot): Result<Project, FulcrumError> {
-  let yaml: string;
-  try {
-    yaml = readFileSync(p.projectFile, "utf-8");
-  } catch (cause) {
-    return err({ kind: "IO_ERROR", message: `cannot read ${p.projectFile}`, cause });
-  }
-  let parsed: unknown;
-  try {
-    parsed = YAML.parse(yaml);
-  } catch (cause) {
-    return err({
-      kind: "INVALID_FRONTMATTER",
-      message: `project.yml is not valid YAML`,
-      cause,
-    });
-  }
-  const validated = ProjectSchema.safeParse(parsed);
-  if (!validated.success) {
-    return err({
-      kind: "INVALID_FRONTMATTER",
-      message: `project.yml schema invalid: ${validated.error.message}`,
-      cause: validated.error,
-    });
-  }
-  return ok(validated.data);
-}
+// Re-export for callers that already import from cli/util. Both CLI and server
+// share these via src/domain/io/project.ts.
+export {
+  findProjectRoot,
+  loadProject,
+  type ProjectRoot,
+} from "../domain/io/project.ts";
 
 export type ParsedArgs = {
   positional: string[];

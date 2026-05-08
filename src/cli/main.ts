@@ -1,6 +1,7 @@
 import { runInit } from "./commands/init.ts";
 import { runList } from "./commands/list.ts";
 import { runNew } from "./commands/new.ts";
+import { runServe } from "./commands/serve.ts";
 import { runShow } from "./commands/show.ts";
 import { runTransition, type TransitionVerb } from "./commands/transition.ts";
 
@@ -21,6 +22,8 @@ Commands (M1):
   accept <id>              Transition delivered → accepted.
   reject <id> --reason X   Transition started/finished/delivered → rejected.
   restart <id>             Transition rejected → started.
+  serve                    Boot the web UI + HTTP API on http://127.0.0.1:3737
+                           Flags: --port N --host X
 
 All commands accept --json for parseable output (intended for agent callers).
 
@@ -59,6 +62,8 @@ export async function main(argv: string[]): Promise<number> {
       return runList(rest);
     case "show":
       return runShow(rest);
+    case "serve":
+      return runServe(rest);
     default:
       if (TRANSITION_VERBS.has(subcommand)) {
         return runTransition(subcommand as TransitionVerb, rest);
