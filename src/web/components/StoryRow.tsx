@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { StoryDto } from "../api.ts";
 
 const TYPE_ICONS: Record<StoryDto["type"], string> = {
@@ -7,10 +8,32 @@ const TYPE_ICONS: Record<StoryDto["type"], string> = {
   release: "▼",
 };
 
-export function StoryRow({ story }: { story: StoryDto }) {
+export function StoryRow({
+  story,
+  isFocused,
+  onClick,
+}: {
+  story: StoryDto;
+  isFocused: boolean;
+  onClick: () => void;
+}) {
   const icon = TYPE_ICONS[story.type];
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Scroll focused row into view when it changes (keyboard-driven nav stays visible).
+  useEffect(() => {
+    if (isFocused && ref.current) {
+      ref.current.scrollIntoView({ block: "nearest", behavior: "auto" });
+    }
+  }, [isFocused]);
+
   return (
-    <div className="story" title={story.id}>
+    <div
+      ref={ref}
+      className={`story${isFocused ? " is-focused" : ""}`}
+      title={story.id}
+      onClick={onClick}
+    >
       <span className={`icon icon-${story.type}`}>{icon}</span>
       <span className="title">{story.title}</span>
       {story.points !== undefined ? (

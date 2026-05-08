@@ -5,7 +5,7 @@ id: T-1010-2602
 labels: []
 points: 8
 position: a9
-state: unstarted
+state: delivered
 type: feature
 ---
 

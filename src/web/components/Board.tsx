@@ -1,8 +1,10 @@
 import { useMemo } from "react";
-import type { ProjectDto, StoryDto } from "../api.ts";
+import type { ProjectDto, StoryDto, TransitionVerb } from "../api.ts";
 import { deriveColumns, type Column } from "../columns.ts";
-import { StoryRow } from "./StoryRow.tsx";
+import type { FocusState } from "../keyboard.ts";
 import { EmptyState } from "./EmptyState.tsx";
+import { ExpandedStory } from "./ExpandedStory.tsx";
+import { StoryRow } from "./StoryRow.tsx";
 
 const COLUMN_LABELS: Record<Column, string> = {
   current: "Current",
@@ -21,9 +23,15 @@ const COLUMN_TINTS: Record<Column, string> = {
 export function Board({
   stories,
   project,
+  focus,
+  setFocus,
+  onTransition,
 }: {
   stories: StoryDto[];
   project: ProjectDto;
+  focus: FocusState;
+  setFocus: (next: FocusState) => void;
+  onTransition: (id: string, verb: TransitionVerb, reason?: string) => void;
 }) {
   const columns = useMemo(() => deriveColumns(stories, project), [stories, project]);
 
@@ -39,7 +47,6 @@ export function Board({
     );
   }
 
-  // M1 default layout: Current / Backlog / Icebox. Done is reachable later.
   const visible: Column[] = ["current", "backlog", "icebox"];
   return (
     <div className="board">
@@ -61,7 +68,27 @@ export function Board({
                   (empty)
                 </div>
               ) : (
-                list.map((s) => <StoryRow key={s.id} story={s} />)
+                list.map((s) => (
+                  <div key={s.id}>
+                    <StoryRow
+                      story={s}
+                      isFocused={focus.focusedId === s.id}
+                      onClick={() => {
+                        const expanded =
+                          focus.focusedId === s.id && focus.expandedId === s.id
+                            ? null
+                            : s.id;
+                        setFocus({ focusedId: s.id, expandedId: expanded });
+                      }}
+                    />
+                    {focus.expandedId === s.id && (
+                      <ExpandedStory
+                        story={s}
+                        onTransition={(verb, reason) => onTransition(s.id, verb, reason)}
+                      />
+                    )}
+                  </div>
+                ))
               )}
             </div>
           </div>

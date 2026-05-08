@@ -216,6 +216,66 @@ body {
   color: var(--ink-muted);
 }
 
+/* ─── EXPANDED STORY ─── */
+.expanded {
+  background: var(--bg-app);
+  border-bottom: 1px solid var(--rule);
+  padding: 12px 14px 14px;
+}
+.expanded-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr max-content 1fr;
+  gap: 4px 16px;
+  font-size: 12px;
+  margin-bottom: 10px;
+  background: var(--bg-surface);
+  padding: 8px 10px;
+  border-radius: 2px;
+}
+.expanded-meta .meta-key {
+  font-family: var(--font-mono);
+  color: var(--ink-secondary);
+}
+.expanded-meta .meta-val {
+  font-family: var(--font-mono);
+  color: var(--ink-primary);
+}
+.expanded-body {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink-secondary);
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.expanded-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  border-top: 1px solid var(--rule);
+  padding-top: 10px;
+}
+.expanded-actions .action-btn {
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 4px 10px;
+  background: var(--ink-primary);
+  color: var(--bg-app);
+  border: 0;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.expanded-actions .action-btn:hover {
+  opacity: 0.85;
+}
+.expanded-actions .expanded-hint {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+
 /* ─── EMPTY STATE ─── */
 .empty {
   padding: 56px 48px;

@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export type StoryDto = {
   id: string;
@@ -50,4 +51,74 @@ export function useProject() {
     },
     staleTime: 5000,
   });
+}
+
+export type TransitionVerb = "start" | "finish" | "deliver" | "accept" | "reject" | "restart";
+
+export function useTransitionStory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { id: string; verb: TransitionVerb; reason?: string }) => {
+      const res = await fetch(`/api/stories/${vars.id}/transitions/${vars.verb}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(vars.reason !== undefined ? { reason: vars.reason } : {}),
+      });
+      const body = (await res.json()) as { ok?: boolean; error?: { kind: string; message: string }; story?: StoryDto };
+      if (!res.ok || !body.ok) {
+        throw new Error(body.error?.message ?? `transition failed: ${res.status}`);
+      }
+      return body.story!;
+    },
+    onMutate: async (vars) => {
+      // Optimistic: apply state change locally so UI is instant; revert on error.
+      await qc.cancelQueries({ queryKey: ["stories"] });
+      const prev = qc.getQueryData<StoryDto[]>(["stories"]);
+      if (prev) {
+        const optimistic: StoryDto["state"] | null =
+          vars.verb === "start" ? "started"
+          : vars.verb === "finish" ? "finished"
+          : vars.verb === "deliver" ? "delivered"
+          : vars.verb === "accept" ? "accepted"
+          : vars.verb === "reject" ? "rejected"
+          : vars.verb === "restart" ? "started"
+          : null;
+        if (optimistic) {
+          qc.setQueryData<StoryDto[]>(
+            ["stories"],
+            prev.map((s) => (s.id === vars.id ? { ...s, state: optimistic } : s)),
+          );
+        }
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["stories"], ctx.prev);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["stories"] });
+    },
+  });
+}
+
+/**
+ * Subscribe to /api/events and invalidate react-query caches on any event.
+ * Per plan: full cache invalidation on every event keeps server stateless and
+ * client correctness total. EventSource handles auto-reconnect natively.
+ */
+export function useSseInvalidator() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const es = new EventSource("/api/events");
+    const handleAny = () => {
+      qc.invalidateQueries({ queryKey: ["stories"] });
+      qc.invalidateQueries({ queryKey: ["project"] });
+    };
+    es.addEventListener("stories-changed", handleAny);
+    es.addEventListener("story-transitioned", handleAny);
+    es.addEventListener("story-removed", handleAny);
+    return () => {
+      es.close();
+    };
+  }, [qc]);
 }
