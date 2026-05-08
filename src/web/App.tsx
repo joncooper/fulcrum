@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useCloseIteration,
   useCreateStory,
+  useDeleteStory,
   useProject,
   useSseInvalidator,
   useStories,
@@ -49,6 +50,7 @@ export function App() {
   const transitionStory = useTransitionStory();
   const updateStory = useUpdateStory();
   const createStory = useCreateStory();
+  const deleteStory = useDeleteStory();
   const closeIter = useCloseIteration();
   const [focus, setFocus] = useState<FocusState>({ focusedId: null, expandedId: null });
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -90,6 +92,25 @@ export function App() {
 
   const handleCancelCreate = useCallback(() => setCreating(false), []);
 
+  const handleDelete = useCallback(
+    (id: string) => {
+      const story = flat.find((s) => s.id === id);
+      if (!story) return;
+      const ok = window.confirm(`Delete ${story.id} "${story.title}"?`);
+      if (!ok) return;
+      deleteStory.mutate(
+        { id, expectedHash: story.hash },
+        {
+          onSuccess: () => {
+            setFocus({ focusedId: null, expandedId: null });
+            setEditingId(null);
+          },
+        },
+      );
+    },
+    [flat, deleteStory],
+  );
+
   const handleCreate = useCallback(
     (input: CreateStoryInput) => {
       createStory.mutate(input, {
@@ -123,6 +144,7 @@ export function App() {
     setFocus,
     onTransition: handleTransition,
     onEdit: handleStartEdit,
+    onDelete: handleDelete,
     enabled: !panelOpen && editingId === null && !creating,
   });
 
@@ -312,6 +334,9 @@ function StatusBar({ ritualNote }: { ritualNote?: string | null } = {}) {
       <span className="sep">·</span>
       <span>r</span>
       <span>reject</span>
+      <span className="sep">·</span>
+      <span>D</span>
+      <span>delete</span>
       <span className="sep">·</span>
       <span>I</span>
       <span>close iteration</span>

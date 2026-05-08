@@ -1,6 +1,7 @@
 import { loadProject, writeProjectAtomic, type ProjectRoot } from "../domain/io/project.ts";
 import {
   createStory,
+  deleteStory,
   findStoryPath,
   listStories,
   readStoryFile,
@@ -37,6 +38,7 @@ export type ApiContext = {
  *   PATCH  /api/stories/:id                     { position?, title?, body?,
  *                                                 points?, type?, labels?,
  *                                                 epic?, icebox?, expectedHash? }
+ *   DELETE /api/stories/:id                     ?expectedHash=...
  *   POST   /api/stories/:id/transitions/:verb   { reason? } for reject
  *   POST   /api/iteration/close                 { acceptedIds: string[] }
  *   GET    /api/events                          SSE stream
@@ -319,6 +321,39 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
       path: file.value.path,
       hash: written.value.hash,
     });
+  }
+
+  // DELETE /api/stories/:id — remove the story file. Accepts ?expectedHash=
+  // for CAS so a concurrent edit doesn't get clobbered. Returns 204 on success.
+  if (method === "DELETE" && patchMatch) {
+    const idQuery = patchMatch[1]!;
+    const expectedHash = url.searchParams.get("expectedHash") ?? undefined;
+
+    const path = await findStoryPath({ storiesDir: project.storiesDir, query: idQuery });
+    if (!path.ok) {
+      const status = path.error.kind === "NOT_FOUND" ? 404 : 500;
+      return json({ error: path.error }, status);
+    }
+    const file = await readStoryFile(path.value);
+    if (!file.ok) return json({ error: file.error }, 500);
+
+    const result = await deleteStory({
+      path: file.value.path,
+      expectedHash: expectedHash ?? file.value.hash,
+    });
+    if (!result.ok) {
+      const status = result.error.kind === "STALE_WRITE" ? 409 : 500;
+      return json({ error: result.error }, status);
+    }
+
+    if (watcher) watcher.markSelfWrite(file.value.path);
+    hub.broadcast({
+      type: "story-removed",
+      path: file.value.path,
+      id: file.value.story.frontmatter.id,
+    });
+
+    return new Response(null, { status: 204 });
   }
 
   const transitionMatch = /^\/api\/stories\/([^/]+)\/transitions\/(start|finish|deliver|accept|reject|restart)$/.exec(

@@ -341,6 +341,46 @@ describe("API: PATCH /api/stories/:id (position)", () => {
   });
 });
 
+describe("API: DELETE /api/stories/:id", () => {
+  test("removes story file, returns 204, list shrinks", async () => {
+    const before = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    expect(before.stories.length).toBe(2);
+    const target = before.stories[0]!;
+
+    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "DELETE",
+    });
+    expect(res.status).toBe(204);
+
+    const after = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    expect(after.stories.length).toBe(1);
+    expect(after.stories.some((s) => s.id === target.id)).toBe(false);
+  });
+
+  test("returns 404 for unknown id", async () => {
+    const res = await fetch(`${server.url}/api/stories/9999`, { method: "DELETE" });
+    expect(res.status).toBe(404);
+  });
+
+  test("returns 409 STALE_WRITE on hash mismatch", async () => {
+    const before = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string }[];
+    };
+    const target = before.stories[0]!;
+    const res = await fetch(
+      `${server.url}/api/stories/${target.id}?expectedHash=${"deadbeef".repeat(8)}`,
+      { method: "DELETE" },
+    );
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: { kind: string } };
+    expect(body.error.kind).toBe("STALE_WRITE");
+  });
+});
+
 describe("API: POST /api/iteration/close", () => {
   async function transitionTo(id: string, verb: string) {
     const res = await fetch(`${server.url}/api/stories/${id}/transitions/${verb}`, {

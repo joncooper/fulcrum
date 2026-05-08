@@ -2,6 +2,7 @@ import { runEdit } from "./commands/edit.ts";
 import { runInit } from "./commands/init.ts";
 import { runList } from "./commands/list.ts";
 import { runNew } from "./commands/new.ts";
+import { runRm } from "./commands/rm.ts";
 import { runServe } from "./commands/serve.ts";
 import { runShow } from "./commands/show.ts";
 import { runTransition, type TransitionVerb } from "./commands/transition.ts";
@@ -20,6 +21,7 @@ Commands (M1):
   edit <id>                Edit story fields. Flags: --title --description
                            --type --points (N|-) --labels a,b --epic (S|-)
                            --icebox true|false --body @- --json
+  rm <id>                  Delete a story (prompts unless --force or --json).
   start <id>               Transition unstarted → started.
   finish <id>              Transition → finished (auto-chains forward).
   deliver <id>             Transition → delivered (auto-chains forward).
@@ -68,6 +70,10 @@ export async function main(argv: string[]): Promise<number> {
       return runShow(rest);
     case "edit":
       return runEdit(rest);
+    case "rm":
+    case "remove":
+    case "delete":
+      return runRm(rest);
     case "serve":
       return runServe(rest);
     default:

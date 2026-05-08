@@ -5,7 +5,7 @@ id: T-1025-33fc
 labels: []
 points: 2
 position: aO
-state: unstarted
+state: delivered
 type: feature
 ---
 

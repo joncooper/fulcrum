@@ -151,6 +151,26 @@ export type StoryPatch = {
   icebox?: boolean;
 };
 
+/**
+ * Delete a story via DELETE /api/stories/:id with CAS-on-hash. The server
+ * broadcasts story-removed, which the SSE invalidator picks up.
+ */
+export function useDeleteStory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: { id: string; expectedHash?: string }) => {
+      const params = vars.expectedHash ? `?expectedHash=${vars.expectedHash}` : "";
+      const res = await fetch(`/api/stories/${vars.id}${params}`, { method: "DELETE" });
+      if (res.status === 204) return { id: vars.id };
+      const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+      throw new Error(body.error?.message ?? `delete failed: ${res.status}`);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["stories"] });
+    },
+  });
+}
+
 export function useUpdateStory() {
   const qc = useQueryClient();
   return useMutation({

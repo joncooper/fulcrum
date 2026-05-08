@@ -229,6 +229,36 @@ export async function listStories(
 }
 
 /**
+ * Delete a story file. Optional CAS-on-hash: if `expectedHash` is provided and
+ * doesn't match the on-disk content, returns STALE_WRITE.
+ */
+export async function deleteStory(opts: {
+  path: string;
+  expectedHash?: string;
+}): Promise<Result<void, FulcrumError>> {
+  if (opts.expectedHash !== undefined) {
+    const current = await readStoryFile(opts.path);
+    if (current.ok && current.value.hash !== opts.expectedHash) {
+      return err({
+        kind: "STALE_WRITE",
+        message: `story changed underneath: expected ${opts.expectedHash.slice(0, 8)}, got ${current.value.hash.slice(0, 8)}`,
+        currentHash: current.value.hash,
+      });
+    }
+  }
+  try {
+    await unlink(opts.path);
+    return ok(undefined);
+  } catch (cause) {
+    return err({
+      kind: "IO_ERROR",
+      message: `failed to delete ${opts.path}`,
+      cause,
+    });
+  }
+}
+
+/**
  * Atomic write with optional CAS-on-hash. If `expectedHash` is provided and the
  * on-disk content's hash doesn't match, returns STALE_WRITE.
  *

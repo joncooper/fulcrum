@@ -304,6 +304,27 @@ describe("CLI dogfooding flow", () => {
     expect(stderr()).toContain("usage");
   });
 
+  test("rm --force --json deletes the story file", async () => {
+    await main(["init"]);
+    await main(["new", "feature", "doomed", "--points", "1"]);
+    const fs = await import("node:fs/promises");
+    const before = await fs.readdir(join(cwd, ".fulcrum/stories"));
+    expect(before.length).toBe(1);
+
+    stdoutChunks = [];
+    expect(await main(["rm", "1001", "--force", "--json"])).toBe(0);
+    const after = await fs.readdir(join(cwd, ".fulcrum/stories"));
+    expect(after.length).toBe(0);
+    expect(stdout()).toContain('"ok":true');
+  });
+
+  test("rm of unknown id surfaces NOT_FOUND", async () => {
+    await main(["init"]);
+    stderrChunks = [];
+    expect(await main(["rm", "9999", "--force"])).toBe(1);
+    expect(stderr()).toContain("NOT_FOUND");
+  });
+
   test("edit --description rewrites body but keeps title", async () => {
     await main(["init"]);
     await main(["new", "feature", "kept title", "--points", "1"]);

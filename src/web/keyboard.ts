@@ -21,10 +21,12 @@ export function useKeyboard(opts: {
   onTransition: (id: string, verb: TransitionVerb, reason?: string) => void;
   /** Begin editing the focused story (called for the `e` keystroke). */
   onEdit?: (id: string) => void;
+  /** Delete the focused story after confirmation (called for the `D` keystroke). */
+  onDelete?: (id: string) => void;
   /** When false, the global handler is detached (e.g. while a modal panel owns input). */
   enabled?: boolean;
 }) {
-  const { stories, focus, setFocus, onTransition, onEdit, enabled = true } = opts;
+  const { stories, focus, setFocus, onTransition, onEdit, onDelete, enabled = true } = opts;
 
   useEffect(() => {
     if (!enabled) return;
@@ -88,9 +90,16 @@ export function useKeyboard(opts: {
       if (e.key === "e" && focus.focusedId && onEdit) {
         e.preventDefault();
         onEdit(focus.focusedId);
+        return;
+      }
+      // Capital-D for delete: caps lock or shift required, so a stray
+      // keystroke won't nuke a story. Confirmation is in the handler.
+      if (e.key === "D" && focus.focusedId && onDelete) {
+        e.preventDefault();
+        onDelete(focus.focusedId);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [stories, focus, setFocus, onTransition, onEdit, enabled]);
+  }, [stories, focus, setFocus, onTransition, onEdit, onDelete, enabled]);
 }
