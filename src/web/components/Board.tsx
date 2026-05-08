@@ -10,7 +10,13 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import type { ProjectDto, StoryDto, StoryPatch, TransitionVerb } from "../api.ts";
+import type {
+  CreateStoryInput,
+  ProjectDto,
+  StoryDto,
+  StoryPatch,
+  TransitionVerb,
+} from "../api.ts";
 import { useUpdateStoryPosition } from "../api.ts";
 import { deriveColumns, type Column } from "../columns.ts";
 import type { FocusState } from "../keyboard.ts";
@@ -18,6 +24,7 @@ import { computeBetween } from "../reorder.ts";
 import { EditStoryForm } from "./EditStoryForm.tsx";
 import { EmptyState } from "./EmptyState.tsx";
 import { ExpandedStory } from "./ExpandedStory.tsx";
+import { NewStoryForm } from "./NewStoryForm.tsx";
 import { StoryRow } from "./StoryRow.tsx";
 
 const COLUMN_LABELS: Record<Column, string> = {
@@ -44,6 +51,10 @@ export function Board({
   onEditCancel,
   onEditSave,
   editSaving,
+  creating,
+  onCreate,
+  onCancelCreate,
+  createSaving,
 }: {
   stories: StoryDto[];
   project: ProjectDto;
@@ -54,6 +65,10 @@ export function Board({
   onEditCancel: () => void;
   onEditSave: (id: string, patch: StoryPatch) => void;
   editSaving: boolean;
+  creating: boolean;
+  onCreate: (input: CreateStoryInput) => void;
+  onCancelCreate: () => void;
+  createSaving: boolean;
 }) {
   const columns = useMemo(() => deriveColumns(stories, project), [stories, project]);
   const updatePosition = useUpdateStoryPosition();
@@ -102,7 +117,15 @@ export function Board({
         <div className="col col-current">
           <EmptyState project={project} />
         </div>
-        <div className="col col-backlog" />
+        <div className="col col-backlog">
+          {creating && (
+            <NewStoryForm
+              onCreate={onCreate}
+              onCancel={onCancelCreate}
+              saving={createSaving}
+            />
+          )}
+        </div>
         <div className="col col-icebox" />
       </div>
     );
@@ -125,13 +148,20 @@ export function Board({
                 </span>
               </div>
               <div className="stories">
+                {c === "backlog" && creating && (
+                  <NewStoryForm
+                    onCreate={onCreate}
+                    onCancel={onCancelCreate}
+                    saving={createSaving}
+                  />
+                )}
                 <SortableContext
                   items={list.map((s) => s.id)}
                   strategy={verticalListSortingStrategy}
                 >
                   {list.length === 0 ? (
                     <div style={{ padding: "12px", color: "var(--ink-muted)", fontSize: 12 }}>
-                      (empty)
+                      {c === "backlog" && creating ? null : "(empty)"}
                     </div>
                   ) : (
                     list.map((s) => (

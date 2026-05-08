@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useCloseIteration,
+  useCreateStory,
   useProject,
   useSseInvalidator,
   useStories,
   useTransitionStory,
   useUpdateStory,
+  type CreateStoryInput,
   type IterationClosedEvent,
   type StoryPatch,
   type TransitionVerb,
@@ -46,9 +48,11 @@ export function App() {
   const { theme, toggle } = useTheme();
   const transitionStory = useTransitionStory();
   const updateStory = useUpdateStory();
+  const createStory = useCreateStory();
   const closeIter = useCloseIteration();
   const [focus, setFocus] = useState<FocusState>({ focusedId: null, expandedId: null });
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [lastClosed, setLastClosed] = useState<IterationClosedEvent | null>(null);
@@ -84,6 +88,20 @@ export function App() {
 
   const handleCancelEdit = useCallback(() => setEditingId(null), []);
 
+  const handleCancelCreate = useCallback(() => setCreating(false), []);
+
+  const handleCreate = useCallback(
+    (input: CreateStoryInput) => {
+      createStory.mutate(input, {
+        onSuccess: ({ story }) => {
+          setCreating(false);
+          setFocus({ focusedId: story.id, expandedId: null });
+        },
+      });
+    },
+    [createStory],
+  );
+
   const handleSaveEdit = useCallback(
     (id: string, patch: StoryPatch) => {
       const story = flat.find((s) => s.id === id);
@@ -97,20 +115,21 @@ export function App() {
     [flat, updateStory],
   );
 
-  // Disable the board-level keyboard shortcuts while the close panel or an
-  // edit form is up; those install their own handlers.
+  // Disable the board-level keyboard shortcuts while the close panel, an
+  // edit form, or the new-story form is up; those install their own handlers.
   useKeyboard({
     stories: flat,
     focus,
     setFocus,
     onTransition: handleTransition,
     onEdit: handleStartEdit,
-    enabled: !panelOpen && editingId === null,
+    enabled: !panelOpen && editingId === null && !creating,
   });
 
-  // Listen for the panel-open keybind ('I' = shift+i) and the close mutation.
+  // Listen for the panel-open keybind ('I' = shift+i) and 'n' to open the
+  // new-story form. These bypass the row-level keyboard handler.
   useEffect(() => {
-    if (panelOpen) return;
+    if (panelOpen || editingId !== null || creating) return;
     const handler = (e: KeyboardEvent) => {
       const tgt = e.target;
       if (
@@ -123,11 +142,16 @@ export function App() {
       if (e.key === "I" && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         setPanelOpen(true);
+        return;
+      }
+      if (e.key === "n" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        setCreating(true);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [panelOpen]);
+  }, [panelOpen, editingId, creating]);
 
   // If the focused story disappears (e.g. moved to a column we don't display),
   // clear focus so the next j/k starts from the top.
@@ -201,6 +225,10 @@ export function App() {
           onEditCancel={handleCancelEdit}
           onEditSave={handleSaveEdit}
           editSaving={updateStory.isPending}
+          creating={creating}
+          onCreate={handleCreate}
+          onCancelCreate={handleCancelCreate}
+          createSaving={createStory.isPending}
         />
         {panelOpen && (
           <IterationClosePanel
@@ -273,11 +301,14 @@ function StatusBar({ ritualNote }: { ritualNote?: string | null } = {}) {
       <span>space</span>
       <span>expand</span>
       <span className="sep">·</span>
-      <span>s/f/d/a</span>
-      <span>start/finish/deliver/accept</span>
+      <span>n</span>
+      <span>new</span>
       <span className="sep">·</span>
       <span>e</span>
       <span>edit</span>
+      <span className="sep">·</span>
+      <span>s/f/d/a</span>
+      <span>start/finish/deliver/accept</span>
       <span className="sep">·</span>
       <span>r</span>
       <span>reject</span>

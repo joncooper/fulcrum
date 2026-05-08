@@ -105,6 +105,42 @@ export function useTransitionStory() {
  * Edit a story's frontmatter and/or body via PATCH. Pass only the fields
  * being changed. `points: null` and `epic: null` clear those fields.
  */
+/**
+ * Create a new story via POST /api/stories. Server allocates id + position
+ * (appended at end of position-sorted list). On success, invalidates the
+ * stories cache so the new story appears in its column.
+ */
+export type CreateStoryInput = {
+  type: StoryDto["type"];
+  title: string;
+  points?: number;
+  body?: string;
+};
+
+export function useCreateStory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: CreateStoryInput) => {
+      const res = await fetch("/api/stories", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(vars),
+      });
+      const body = (await res.json()) as
+        | { ok: true; story: StoryDto; path: string; hash: string }
+        | { ok?: false; error: { kind: string; message: string } };
+      if (!res.ok || !("ok" in body) || body.ok !== true) {
+        const e = "error" in body ? body.error : null;
+        throw new Error(e?.message ?? `create failed: ${res.status}`);
+      }
+      return body;
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["stories"] });
+    },
+  });
+}
+
 export type StoryPatch = {
   title?: string;
   body?: string;

@@ -5,7 +5,7 @@ id: T-1018-50e3
 labels: []
 points: 3
 position: aB
-state: unstarted
+state: delivered
 type: feature
 ---
 
