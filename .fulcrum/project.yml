@@ -1,0 +1,12 @@
+current_iteration: 1
+name: fulcrum
+settings:
+  estimate_scale:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 5
+    - 8
+velocity: 0
+version: 1
