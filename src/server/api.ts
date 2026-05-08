@@ -1,5 +1,15 @@
 import { loadProject, type ProjectRoot } from "../domain/io/project.ts";
-import { findStoryPath, listStories, readStoryFile } from "../domain/io/stories.ts";
+import {
+  createStory,
+  findStoryPath,
+  listStories,
+  readStoryFile,
+  writeStoryAtomic,
+} from "../domain/io/stories.ts";
+import { between } from "../domain/position.ts";
+import { transition, type Command } from "../domain/state-machine.ts";
+import type { SseHub } from "./sse.ts";
+import type { FileWatcher } from "./file-watcher.ts";
 
 const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
@@ -12,22 +22,37 @@ function titleFromBody(body: string): string {
   return firstLine.replace(/^#\s*/, "").trim();
 }
 
+export type ApiContext = {
+  project: ProjectRoot;
+  hub: SseHub;
+  watcher: FileWatcher | null;
+};
+
 /**
  * HTTP API handler. Routes:
- *   GET /api/health          → { ok, name, version }
- *   GET /api/project         → { ok, project }
- *   GET /api/stories         → { ok, stories: [...], malformed: [...] }
- *   GET /api/stories/:id     → { ok, story, path, hash }
- *
- * All endpoints are read-only in D1. Write endpoints land in E1.
+ *   GET    /api/health
+ *   GET    /api/project
+ *   GET    /api/stories
+ *   GET    /api/stories/:id
+ *   POST   /api/stories                         { type, title, points?, body? }
+ *   POST   /api/stories/:id/transitions/:verb   { reason? } for reject
+ *   GET    /api/events                          SSE stream
  */
-export async function handleApi(req: Request, project: ProjectRoot): Promise<Response> {
-  if (req.method !== "GET" && req.method !== "HEAD") {
-    return json({ error: { kind: "METHOD_NOT_ALLOWED", message: `${req.method} not allowed` } }, 405);
-  }
-
+export async function handleApi(req: Request, ctx: ApiContext): Promise<Response> {
+  const { project, hub, watcher } = ctx;
   const url = new URL(req.url);
   const pathname = url.pathname;
+  const method = req.method;
+
+  if (pathname === "/api/events") {
+    if (method !== "GET") {
+      return json({ error: { kind: "METHOD_NOT_ALLOWED", message: `${method} not allowed` } }, 405);
+    }
+    return hub.openStream();
+  }
+
+  // Read-only routes
+  if (method === "GET" || method === "HEAD") {
 
   if (pathname === "/api/health") {
     return json({ ok: true, name: "fulcrum", version: "0.0.1" });
@@ -58,26 +83,159 @@ export async function handleApi(req: Request, project: ProjectRoot): Promise<Res
     });
   }
 
-  const idMatch = /^\/api\/stories\/([^/]+)$/.exec(pathname);
-  if (idMatch) {
-    const path = await findStoryPath({ storiesDir: project.storiesDir, query: idMatch[1]! });
+    const idMatch = /^\/api\/stories\/([^/]+)$/.exec(pathname);
+    if (idMatch) {
+      const path = await findStoryPath({ storiesDir: project.storiesDir, query: idMatch[1]! });
+      if (!path.ok) {
+        const status = path.error.kind === "NOT_FOUND" ? 404 : 500;
+        return json({ error: path.error }, status);
+      }
+      const file = await readStoryFile(path.value);
+      if (!file.ok) return json({ error: file.error }, 500);
+      return json({
+        ok: true,
+        story: {
+          ...file.value.story.frontmatter,
+          title: titleFromBody(file.value.story.body),
+          body: file.value.story.body,
+        },
+        path: file.value.path,
+        hash: file.value.hash,
+      });
+    }
+
+    return json({ error: { kind: "NOT_FOUND", message: `no route: ${pathname}` } }, 404);
+  }
+
+  // Write routes
+  if (method === "POST" && pathname === "/api/stories") {
+    let body: { type?: string; title?: string; points?: number; body?: string };
+    try {
+      body = (await req.json()) as typeof body;
+    } catch {
+      return json({ error: { kind: "INVALID_FRONTMATTER", message: "request body is not JSON" } }, 400);
+    }
+    const type = body.type;
+    if (type !== "feature" && type !== "bug" && type !== "chore" && type !== "release") {
+      return json({ error: { kind: "INVALID_FRONTMATTER", message: "type must be feature/bug/chore/release" } }, 400);
+    }
+    const title = (body.title ?? "").trim();
+    if (title.length === 0) {
+      return json({ error: { kind: "INVALID_FRONTMATTER", message: "title required" } }, 400);
+    }
+
+    const list = await listStories(project.storiesDir);
+    if (!list.ok) return json({ error: list.error }, 500);
+    const lastPos =
+      list.value.stories.length === 0
+        ? null
+        : list.value.stories[list.value.stories.length - 1]!.story.frontmatter.position;
+    const position = between(lastPos, null);
+
+    const result = await createStory({
+      storiesDir: project.storiesDir,
+      type,
+      title,
+      points: body.points,
+      position,
+      body: body.body,
+    });
+    if (!result.ok) return json({ error: result.error }, 400);
+
+    if (watcher) watcher.markSelfWrite(result.value.path);
+    hub.broadcast({ type: "stories-changed", path: result.value.path, id: result.value.story.frontmatter.id });
+
+    return json(
+      {
+        ok: true,
+        story: {
+          ...result.value.story.frontmatter,
+          title,
+          body: result.value.story.body,
+        },
+        path: result.value.path,
+        hash: result.value.hash,
+      },
+      201,
+    );
+  }
+
+  const transitionMatch = /^\/api\/stories\/([^/]+)\/transitions\/(start|finish|deliver|accept|reject|restart)$/.exec(
+    pathname,
+  );
+  if (method === "POST" && transitionMatch) {
+    const idQuery = transitionMatch[1]!;
+    const verb = transitionMatch[2]! as
+      | "start"
+      | "finish"
+      | "deliver"
+      | "accept"
+      | "reject"
+      | "restart";
+
+    let reqBody: { reason?: string; expectedHash?: string } = {};
+    if (req.headers.get("content-length") && Number(req.headers.get("content-length")) > 0) {
+      try {
+        reqBody = (await req.json()) as typeof reqBody;
+      } catch {
+        return json({ error: { kind: "INVALID_FRONTMATTER", message: "body is not JSON" } }, 400);
+      }
+    }
+
+    const path = await findStoryPath({ storiesDir: project.storiesDir, query: idQuery });
     if (!path.ok) {
       const status = path.error.kind === "NOT_FOUND" ? 404 : 500;
       return json({ error: path.error }, status);
     }
     const file = await readStoryFile(path.value);
     if (!file.ok) return json({ error: file.error }, 500);
+
+    let cmd: Command;
+    if (verb === "reject") {
+      const reason = reqBody.reason?.trim();
+      if (!reason) {
+        return json({ error: { kind: "INVALID_FRONTMATTER", message: "reject requires reason" } }, 400);
+      }
+      cmd = { kind: "reject", reason };
+    } else {
+      cmd = { kind: verb };
+    }
+
+    const transitioned = transition(file.value.story.frontmatter, cmd);
+    if (!transitioned.ok) {
+      return json({ error: transitioned.error }, 409);
+    }
+
+    const updated = { frontmatter: transitioned.value, body: file.value.story.body };
+    const written = await writeStoryAtomic({
+      path: file.value.path,
+      story: updated,
+      expectedHash: reqBody.expectedHash ?? file.value.hash,
+    });
+    if (!written.ok) {
+      const status = written.error.kind === "STALE_WRITE" ? 409 : 500;
+      return json({ error: written.error }, status);
+    }
+
+    if (watcher) watcher.markSelfWrite(file.value.path);
+    hub.broadcast({
+      type: "story-transitioned",
+      path: file.value.path,
+      id: transitioned.value.id,
+      data: { from: file.value.story.frontmatter.state, to: transitioned.value.state },
+    });
+
     return json({
       ok: true,
       story: {
-        ...file.value.story.frontmatter,
+        ...transitioned.value,
         title: titleFromBody(file.value.story.body),
         body: file.value.story.body,
       },
       path: file.value.path,
-      hash: file.value.hash,
+      hash: written.value.hash,
     });
   }
 
-  return json({ error: { kind: "NOT_FOUND", message: `no route: ${pathname}` } }, 404);
+  return json({ error: { kind: "METHOD_NOT_ALLOWED", message: `${method} ${pathname}` } }, 405);
 }

@@ -3,6 +3,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findProjectRoot, type ProjectRoot } from "../domain/io/project.ts";
 import { handleApi } from "./api.ts";
+import { FileWatcher } from "./file-watcher.ts";
+import { SseHub } from "./sse.ts";
 
 export type ServeOptions = {
   /** Hostname to bind. Default 127.0.0.1. */
@@ -88,6 +90,8 @@ export function startServer(opts: ServeOptions = {}): RunningServer {
   }
 
   const webDist = opts.webDist === null ? null : opts.webDist ?? resolveWebDist();
+  const hub = new SseHub();
+  const watcher = new FileWatcher(project, hub);
 
   const server = Bun.serve({
     hostname: opts.hostname ?? "127.0.0.1",
@@ -96,7 +100,7 @@ export function startServer(opts: ServeOptions = {}): RunningServer {
     async fetch(req) {
       const url = new URL(req.url);
       if (url.pathname.startsWith("/api/")) {
-        return handleApi(req, project);
+        return handleApi(req, { project, hub, watcher });
       }
 
       if (webDist) {
@@ -129,6 +133,8 @@ export function startServer(opts: ServeOptions = {}): RunningServer {
     port,
     url: `http://${hostname}:${port}`,
     stop: async () => {
+      hub.closeAll();
+      await watcher.stop();
       await server.stop(true);
     },
   };

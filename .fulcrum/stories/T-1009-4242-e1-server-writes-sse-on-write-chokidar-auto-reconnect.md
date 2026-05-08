@@ -5,7 +5,7 @@ id: T-1009-4242
 labels: []
 points: 5
 position: a8
-state: unstarted
+state: delivered
 type: feature
 ---
 
