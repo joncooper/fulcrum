@@ -637,23 +637,25 @@ body {
   padding: 0;
 }
 .iter-close-row {
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.iter-close-row-line {
   display: grid;
   grid-template-columns: 18px 16px 1fr auto;
   gap: 8px;
   align-items: center;
   padding: 4px 16px;
-  border-bottom: 1px solid var(--rule);
   cursor: pointer;
-  font-size: 13px;
-  line-height: 1.35;
 }
-.iter-close-row:hover {
+.iter-close-row-line:hover {
   background: rgba(0, 0, 0, 0.025);
 }
-[data-theme="dark"] .iter-close-row:hover {
+[data-theme="dark"] .iter-close-row-line:hover {
   background: rgba(255, 255, 255, 0.04);
 }
-.iter-close-row.is-focused {
+.iter-close-row.is-focused .iter-close-row-line {
   outline: 2px solid var(--type-feature);
   outline-offset: -2px;
 }
@@ -661,8 +663,23 @@ body {
   cursor: default;
   background: var(--col-backlog);
 }
-.iter-close-row.is-spill:hover {
-  background: var(--col-backlog);
+.iter-close-row.is-spill .iter-close-row-line {
+  cursor: default;
+}
+.iter-close-row.is-spill .iter-close-row-line:hover {
+  background: transparent;
+}
+.iter-close-body {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-secondary);
+  background: var(--bg-surface);
+  margin: 0;
+  padding: 10px 16px 12px 42px;
+  white-space: pre-wrap;
+  border-top: 1px solid var(--rule);
+  max-height: 200px;
+  overflow-y: auto;
 }
 .iter-close-check {
   font-family: var(--font-mono);

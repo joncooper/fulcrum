@@ -21,6 +21,8 @@ const TYPE_ICONS: Record<StoryDto["type"], string> = {
  *   j/k         navigate rows in focused list
  *   space       toggle current row's accept state
  *   a           bulk-accept all delivered
+ *   o           expand / collapse focused row's body in place
+ *   R           reject focused row with a reason (capital — intentional friction)
  *   enter       commit (writes via POST /api/iteration/close)
  *   esc         cancel (close panel)
  *
@@ -33,12 +35,15 @@ export function IterationClosePanel({
   project,
   onCommit,
   onCancel,
+  onReject,
   isCommitting,
 }: {
   stories: StoryDto[];
   project: ProjectDto;
   onCommit: (acceptedIds: string[]) => void;
   onCancel: () => void;
+  /** Reject the focused story with a reason. Story leaves the deliverable list. */
+  onReject: (id: string, reason: string) => void;
   isCommitting: boolean;
 }) {
   // Stories the panel offers: in-projection, delivered (ready to accept).
@@ -59,6 +64,7 @@ export function IterationClosePanel({
   // Default: accept all deliverable. User can toggle off any row before commit.
   const [accepted, setAccepted] = useState<Set<string>>(() => new Set(deliverable.map((s) => s.id)));
   const [focusIdx, setFocusIdx] = useState(0);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Recompute accepted set when deliverable list changes (e.g. another tab transitioned a story).
@@ -144,11 +150,31 @@ export function IterationClosePanel({
         e.preventDefault();
         const target = deliverable[focusIdx];
         if (target) toggle(target.id);
+        return;
+      }
+      if (e.key === "o") {
+        e.preventDefault();
+        const target = deliverable[focusIdx];
+        if (target) setExpandedId((prev) => (prev === target.id ? null : target.id));
+        return;
+      }
+      // Capital-R: reject focused story with a required reason. Capital so
+      // accidental keystrokes don't punt validated work.
+      if (e.key === "R") {
+        e.preventDefault();
+        const target = deliverable[focusIdx];
+        if (!target) return;
+        const reason = window.prompt(
+          `Reject "${target.title}"?\nProvide a reason (required):`,
+        );
+        if (reason && reason.trim().length > 0) {
+          onReject(target.id, reason.trim());
+        }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [bulkAccept, commit, deliverable, focusIdx, onCancel, toggle]);
+  }, [bulkAccept, commit, deliverable, focusIdx, onCancel, onReject, toggle]);
 
   // Focus the panel container so global tab-state is sane and keystrokes feel
   // anchored to the panel.
@@ -195,20 +221,27 @@ export function IterationClosePanel({
                     className={`iter-close-row${idx === focusIdx ? " is-focused" : ""}${
                       accepted.has(s.id) ? " is-accepted" : ""
                     }`}
-                    onClick={() => {
-                      setFocusIdx(idx);
-                      toggle(s.id);
-                    }}
                   >
-                    <span className="iter-close-check" aria-hidden>
-                      {accepted.has(s.id) ? "✓" : " "}
-                    </span>
-                    <span className={`icon icon-${s.type}`}>{TYPE_ICONS[s.type]}</span>
-                    <span className="title">{s.title}</span>
-                    {s.points !== undefined ? (
-                      <span className="pts">[{s.points}]</span>
-                    ) : (
-                      <span className="pts" />
+                    <div
+                      className="iter-close-row-line"
+                      onClick={() => {
+                        setFocusIdx(idx);
+                        toggle(s.id);
+                      }}
+                    >
+                      <span className="iter-close-check" aria-hidden>
+                        {accepted.has(s.id) ? "✓" : " "}
+                      </span>
+                      <span className={`icon icon-${s.type}`}>{TYPE_ICONS[s.type]}</span>
+                      <span className="title">{s.title}</span>
+                      {s.points !== undefined ? (
+                        <span className="pts">[{s.points}]</span>
+                      ) : (
+                        <span className="pts" />
+                      )}
+                    </div>
+                    {expandedId === s.id && (
+                      <pre className="iter-close-body">{s.body}</pre>
                     )}
                   </li>
                 ))}
@@ -222,12 +255,14 @@ export function IterationClosePanel({
               <ul className="iter-close-list iter-close-spill-list" role="list">
                 {willSpill.map((s) => (
                   <li key={s.id} className="iter-close-row is-spill">
-                    <span className="iter-close-check" aria-hidden>
-                      —
-                    </span>
-                    <span className={`icon icon-${s.type}`}>{TYPE_ICONS[s.type]}</span>
-                    <span className="title">{s.title}</span>
-                    <span className={`pill pill-${s.state}`}>{s.state}</span>
+                    <div className="iter-close-row-line">
+                      <span className="iter-close-check" aria-hidden>
+                        —
+                      </span>
+                      <span className={`icon icon-${s.type}`}>{TYPE_ICONS[s.type]}</span>
+                      <span className="title">{s.title}</span>
+                      <span className={`pill pill-${s.state}`}>{s.state}</span>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -244,7 +279,8 @@ export function IterationClosePanel({
           {willSpill.length > 0 ? ` · ${willSpill.length} spilling` : ""}
         </span>
         <span className="iter-close-keys">
-          <kbd>space</kbd> toggle · <kbd>a</kbd> all · <kbd>enter</kbd> commit · <kbd>esc</kbd> cancel
+          <kbd>space</kbd> toggle · <kbd>a</kbd> all · <kbd>o</kbd> view · <kbd>R</kbd> reject ·
+          {" "}<kbd>enter</kbd> commit · <kbd>esc</kbd> cancel
         </span>
         <button
           type="button"

@@ -342,6 +342,7 @@ export function App() {
             project={project.data}
             onCommit={handleCommitClose}
             onCancel={() => setPanelOpen(false)}
+            onReject={(id, reason) => handleTransition(id, "reject", reason)}
             isCommitting={closeIter.isPending}
           />
         )}
