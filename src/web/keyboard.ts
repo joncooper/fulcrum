@@ -25,6 +25,8 @@ export function useKeyboard(opts: {
   onDelete?: (id: string) => void;
   /** Toggle icebox on the focused story (called for the `i` keystroke). */
   onToggleIcebox?: (id: string) => void;
+  /** Move the focused story up or down within its column (J / K keystrokes). */
+  onMove?: (id: string, direction: "up" | "down") => void;
   /** When false, the global handler is detached (e.g. while a modal panel owns input). */
   enabled?: boolean;
 }) {
@@ -36,6 +38,7 @@ export function useKeyboard(opts: {
     onEdit,
     onDelete,
     onToggleIcebox,
+    onMove,
     enabled = true,
   } = opts;
 
@@ -54,6 +57,18 @@ export function useKeyboard(opts: {
 
       const idx = focus.focusedId ? stories.findIndex((s) => s.id === focus.focusedId) : -1;
 
+      // Capital J/K: move focused story down/up one slot within its column.
+      // Checked before lowercase j/k so the case-sensitive match wins.
+      if (e.key === "J" && focus.focusedId && onMove) {
+        e.preventDefault();
+        onMove(focus.focusedId, "down");
+        return;
+      }
+      if (e.key === "K" && focus.focusedId && onMove) {
+        e.preventDefault();
+        onMove(focus.focusedId, "up");
+        return;
+      }
       if (e.key === "j" || e.key === "ArrowDown") {
         e.preventDefault();
         const nextIdx = idx < 0 ? 0 : Math.min(idx + 1, stories.length - 1);
@@ -117,5 +132,15 @@ export function useKeyboard(opts: {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [stories, focus, setFocus, onTransition, onEdit, onDelete, onToggleIcebox, enabled]);
+  }, [
+    stories,
+    focus,
+    setFocus,
+    onTransition,
+    onEdit,
+    onDelete,
+    onToggleIcebox,
+    onMove,
+    enabled,
+  ]);
 }

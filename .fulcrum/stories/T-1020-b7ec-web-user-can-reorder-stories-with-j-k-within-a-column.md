@@ -5,7 +5,7 @@ id: T-1020-b7ec
 labels: []
 points: 3
 position: aJ
-state: unstarted
+state: delivered
 type: feature
 ---
 

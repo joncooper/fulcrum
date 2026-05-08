@@ -8,11 +8,13 @@ import {
   useStories,
   useTransitionStory,
   useUpdateStory,
+  useUpdateStoryPosition,
   type CreateStoryInput,
   type IterationClosedEvent,
   type StoryPatch,
   type TransitionVerb,
 } from "./api.ts";
+import { computeBetween } from "./reorder.ts";
 import { Board } from "./components/Board.tsx";
 import { IterationClosePanel } from "./components/IterationClosePanel.tsx";
 import { useKeyboard, type FocusState } from "./keyboard.ts";
@@ -51,6 +53,7 @@ export function App() {
   const updateStory = useUpdateStory();
   const createStory = useCreateStory();
   const deleteStory = useDeleteStory();
+  const updatePosition = useUpdateStoryPosition();
   const closeIter = useCloseIteration();
   const [focus, setFocus] = useState<FocusState>({ focusedId: null, expandedId: null });
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -70,11 +73,15 @@ export function App() {
 
   // Flat ordered story list for j/k navigation: matches the column-derived
   // visual order so keyboard nav follows what the user sees.
-  const flat = useMemo(() => {
-    if (!stories.data || !project.data) return [];
-    const cols = deriveColumns(stories.data, project.data);
-    return [...cols.current, ...cols.backlog, ...cols.icebox];
+  const cols = useMemo(() => {
+    if (!stories.data || !project.data) return null;
+    return deriveColumns(stories.data, project.data);
   }, [stories.data, project.data]);
+
+  const flat = useMemo(() => {
+    if (!cols) return [];
+    return [...cols.current, ...cols.backlog, ...cols.icebox];
+  }, [cols]);
 
   const handleTransition = useCallback(
     (id: string, verb: TransitionVerb, reason?: string) => {
@@ -91,6 +98,26 @@ export function App() {
   const handleCancelEdit = useCallback(() => setEditingId(null), []);
 
   const handleCancelCreate = useCallback(() => setCreating(false), []);
+
+  const handleMove = useCallback(
+    (id: string, direction: "up" | "down") => {
+      if (!cols) return;
+      // Find which column owns this story.
+      const colKey = (["current", "backlog", "icebox"] as const).find((c) =>
+        cols[c].some((s) => s.id === id),
+      );
+      if (!colKey) return;
+      const list = cols[colKey];
+      const idx = list.findIndex((s) => s.id === id);
+      const targetIdx = direction === "down" ? idx + 1 : idx - 1;
+      if (targetIdx < 0 || targetIdx >= list.length) return;
+      const nextPos = computeBetween(list, idx, targetIdx);
+      if (nextPos === null) return;
+      const story = list[idx]!;
+      updatePosition.mutate({ id, position: nextPos, expectedHash: story.hash });
+    },
+    [cols, updatePosition],
+  );
 
   const handleToggleIcebox = useCallback(
     (id: string) => {
@@ -162,6 +189,7 @@ export function App() {
     onEdit: handleStartEdit,
     onDelete: handleDelete,
     onToggleIcebox: handleToggleIcebox,
+    onMove: handleMove,
     enabled: !panelOpen && editingId === null && !creating,
   });
 
@@ -336,6 +364,9 @@ function StatusBar({ ritualNote }: { ritualNote?: string | null } = {}) {
     <footer className="status-bar">
       <span>j/k</span>
       <span>navigate</span>
+      <span className="sep">·</span>
+      <span>J/K</span>
+      <span>move</span>
       <span className="sep">·</span>
       <span>space</span>
       <span>expand</span>
