@@ -18,6 +18,7 @@ import { computeBetween } from "./reorder.ts";
 import { Board } from "./components/Board.tsx";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { IterationClosePanel } from "./components/IterationClosePanel.tsx";
+import { SearchBar, matchesQuery } from "./components/SearchBar.tsx";
 import { useKeyboard, type FocusState } from "./keyboard.ts";
 import { deriveColumns } from "./columns.ts";
 
@@ -59,6 +60,7 @@ export function App() {
   const [focus, setFocus] = useState<FocusState>({ focusedId: null, expandedId: null });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -73,12 +75,20 @@ export function App() {
 
   useSseInvalidator({ onIterationClosed: handleIterationClosed });
 
+  // Apply search filter before deriving columns so j/k navigation only walks
+  // matching stories.
+  const filteredStories = useMemo(() => {
+    if (!stories.data) return [];
+    if (searchQuery === null || searchQuery.length === 0) return stories.data;
+    return stories.data.filter((s) => matchesQuery(s, searchQuery));
+  }, [stories.data, searchQuery]);
+
   // Flat ordered story list for j/k navigation: matches the column-derived
   // visual order so keyboard nav follows what the user sees.
   const cols = useMemo(() => {
-    if (!stories.data || !project.data) return null;
-    return deriveColumns(stories.data, project.data);
-  }, [stories.data, project.data]);
+    if (!project.data) return null;
+    return deriveColumns(filteredStories, project.data);
+  }, [filteredStories, project.data]);
 
   const flat = useMemo(() => {
     if (!cols) return [];
@@ -192,7 +202,12 @@ export function App() {
     onDelete: handleDelete,
     onToggleIcebox: handleToggleIcebox,
     onMove: handleMove,
-    enabled: !panelOpen && editingId === null && !creating && !helpOpen,
+    enabled:
+      !panelOpen &&
+      editingId === null &&
+      !creating &&
+      !helpOpen &&
+      searchQuery === null,
   });
 
   // Listen for the panel-open keybind ('I' = shift+i), 'n' to open the
@@ -222,11 +237,16 @@ export function App() {
       if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         setHelpOpen(true);
+        return;
+      }
+      if (e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        setSearchQuery((q) => (q === null ? "" : q));
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [panelOpen, editingId, creating, helpOpen]);
+  }, [panelOpen, editingId, creating, helpOpen, searchQuery]);
 
   // If the focused story disappears (e.g. moved to a column we don't display),
   // clear focus so the next j/k starts from the top.
@@ -289,9 +309,17 @@ export function App() {
         onToggleTheme={toggle}
         onClickIteration={() => setPanelOpen(true)}
       />
+      {searchQuery !== null && (
+        <SearchBar
+          query={searchQuery}
+          matchCount={filteredStories.length}
+          onChange={setSearchQuery}
+          onClose={() => setSearchQuery(null)}
+        />
+      )}
       <div className="board-shell" data-closing={closing ? "true" : undefined}>
         <Board
-          stories={stories.data}
+          stories={filteredStories}
           project={project.data}
           focus={focus}
           setFocus={setFocus}
@@ -400,6 +428,9 @@ function StatusBar({ ritualNote }: { ritualNote?: string | null } = {}) {
       <span className="sep">·</span>
       <span>I</span>
       <span>close iteration</span>
+      <span className="sep">·</span>
+      <span>/</span>
+      <span>search</span>
       <span className="sep">·</span>
       <span>?</span>
       <span>help</span>

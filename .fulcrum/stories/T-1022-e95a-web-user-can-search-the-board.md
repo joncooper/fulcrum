@@ -5,7 +5,7 @@ id: T-1022-e95a
 labels: []
 points: 3
 position: aL
-state: unstarted
+state: delivered
 type: feature
 ---
 

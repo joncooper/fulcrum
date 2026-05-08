@@ -468,6 +468,45 @@ body {
   outline: none;
 }
 
+/* ─── SEARCH BAR ─── */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--rule);
+  padding: 4px 16px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.search-prompt {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--ink-secondary);
+}
+.search-input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink-primary);
+  padding: 4px 0;
+  outline: none;
+}
+.search-input::placeholder {
+  color: var(--ink-muted);
+}
+.search-count,
+.search-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+.search-count {
+  color: var(--ink-secondary);
+}
+
 /* ─── HELP OVERLAY ─── */
 .help-overlay {
   position: absolute;
