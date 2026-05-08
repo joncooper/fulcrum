@@ -49,7 +49,9 @@ export function StoryRow({
         ref.current = node;
       }}
       style={style}
-      className={`story${isFocused ? " is-focused" : ""}${isDragging ? " is-dragging" : ""}`}
+      className={`story${isFocused ? " is-focused" : ""}${isDragging ? " is-dragging" : ""}${
+        story.state === "accepted" ? " is-accepted" : ""
+      }`}
       title={story.id}
       onClick={onClick}
       {...attributes}

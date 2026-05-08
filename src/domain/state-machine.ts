@@ -78,7 +78,14 @@ export function transition(
           message: `accept only valid from delivered, got ${story.state}`,
         });
       }
-      return ok({ ...story, state: "accepted" });
+      // Stamp accepted_at on the transition itself. The story's iteration is
+      // derived later by checking which iteration window contains this
+      // timestamp; there is no `iteration: N` field on stories.
+      return ok({
+        ...story,
+        state: "accepted",
+        accepted_at: new Date().toISOString(),
+      });
     }
 
     case "reject": {

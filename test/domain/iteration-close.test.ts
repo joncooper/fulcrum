@@ -2,18 +2,24 @@ import { describe, expect, test } from "bun:test";
 import {
   closeIteration,
   deliverableStoriesForClose,
-  rollingVelocity,
+  rollingVelocityFromHistory,
 } from "../../src/domain/iteration-close.ts";
-import type { Project } from "../../src/domain/schemas/project.ts";
+import type { IterationRecord, Project } from "../../src/domain/schemas/project.ts";
 import type { Story, StoryFrontmatter, StoryState } from "../../src/domain/schemas/story.ts";
 
-const project = (current_iteration: number, velocity = 0): Project => ({
+const project = (
+  current_iteration: number,
+  velocity = 0,
+  iteration_history: IterationRecord[] = [],
+  iteration_start_date = "2026-05-01",
+): Project => ({
   version: 1,
   name: "test",
   velocity,
   current_iteration,
-  iteration_start_date: "2026-05-01",
+  iteration_start_date,
   iteration_length_days: 7,
+  iteration_history,
   settings: { estimate_scale: [0, 1, 2, 3, 5, 8] },
 });
 
@@ -38,7 +44,7 @@ function makeStory(
 }
 
 describe("closeIteration: happy path", () => {
-  test("accepts delivered stories and stamps the closing iteration", () => {
+  test("transitions delivered → accepted, stamps accepted_at, advances project", () => {
     const a = makeStory("delivered", { points: 3 });
     const b = makeStory("delivered", { points: 5 });
     const r = closeIteration({
@@ -51,37 +57,85 @@ describe("closeIteration: happy path", () => {
     expect(r.value.changed).toHaveLength(2);
     for (const s of r.value.changed) {
       expect(s.frontmatter.state).toBe("accepted");
-      expect(s.frontmatter.iteration).toBe(7); // closing iteration, NOT N+1
+      expect(s.frontmatter.accepted_at).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO
+      // No `iteration` field on the story — iteration is derived.
+      expect((s.frontmatter as { iteration?: unknown }).iteration).toBeUndefined();
     }
     expect(r.value.project.current_iteration).toBe(8);
     expect(r.value.velocity_actual).toBe(8);
   });
 
-  test("velocity_actual sums points of just-accepted stories only", () => {
-    const a = makeStory("delivered", { points: 3 });
-    const b = makeStory("delivered", { points: 5 });
+  test("project pushes a new iteration_history record on close", () => {
+    const a = makeStory("delivered", { points: 5 });
     const r = closeIteration({
-      project: project(1),
-      stories: [a, b],
-      acceptedIds: [a.frontmatter.id], // accept only a
+      project: project(3, 0, [], "2026-05-01"),
+      stories: [a],
+      acceptedIds: [a.frontmatter.id],
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.velocity_actual).toBe(3);
+    expect(r.value.project.iteration_history).toHaveLength(1);
+    const rec = r.value.project.iteration_history[0]!;
+    expect(rec.number).toBe(3);
+    expect(rec.start_date).toBe("2026-05-01");
+    expect(rec.end_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(rec.velocity).toBe(5);
   });
 
-  test("project velocity (rolling avg) recomputed after close", () => {
-    const a = makeStory("delivered", { points: 5 });
-    const b = makeStory("delivered", { points: 3 });
+  test("ad-hoc accepted story (state=accepted, accepted_at in window) counts toward velocity", () => {
+    // Chore was accepted ad-hoc earlier in the iteration (e.g. via `fulcrum accept`).
+    const chore = makeStory("accepted", {
+      type: "chore",
+      points: undefined,
+      accepted_at: "2026-05-03T10:00:00.000Z",
+    });
+    // Feature accepted as part of the close ritual.
+    const feat = makeStory("delivered", { points: 8 });
     const r = closeIteration({
-      project: project(1, /* old velocity */ 99),
-      stories: [a, b],
-      acceptedIds: [a.frontmatter.id, b.frontmatter.id],
+      project: project(2, 0, [], "2026-05-01"),
+      stories: [chore, feat],
+      acceptedIds: [feat.frontmatter.id],
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    // Only one closed iteration with 8 pts → rolling avg = 8.
-    expect(r.value.project.velocity).toBe(8);
+    // velocity_actual = chore (0 pts) + feat (8 pts) = 8.
+    expect(r.value.velocity_actual).toBe(8);
+    // Only the feat is in `changed` — the chore was already accepted.
+    expect(r.value.changed).toHaveLength(1);
+    expect(r.value.changed[0]!.frontmatter.id).toBe(feat.frontmatter.id);
+  });
+
+  test("accepted_at outside current window is NOT counted (prior iteration)", () => {
+    const old = makeStory("accepted", {
+      points: 5,
+      accepted_at: "2026-04-15T10:00:00.000Z", // before window 2026-05-01
+    });
+    const r = closeIteration({
+      project: project(2, 0, [], "2026-05-01"),
+      stories: [old],
+      acceptedIds: [],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.velocity_actual).toBe(0);
+  });
+
+  test("project velocity (rolling avg) recomputed from iteration_history after close", () => {
+    const history: IterationRecord[] = [
+      { number: 1, start_date: "2026-04-01", end_date: "2026-04-08", velocity: 8 },
+      { number: 2, start_date: "2026-04-08", end_date: "2026-04-15", velocity: 5 },
+    ];
+    const a = makeStory("delivered", { points: 5 });
+    const r = closeIteration({
+      project: project(3, 99, history, "2026-04-15"),
+      stories: [a],
+      acceptedIds: [a.frontmatter.id],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // History after close: [8, 5, 5] → avg = 6 (rounded).
+    expect(r.value.project.velocity).toBe(6);
+    expect(r.value.project.iteration_history).toHaveLength(3);
   });
 
   test("stories input is not mutated", () => {
@@ -97,7 +151,7 @@ describe("closeIteration: happy path", () => {
 });
 
 describe("closeIteration: spilled", () => {
-  test("delivered-but-not-accepted stories are returned as spilled", () => {
+  test("delivered-but-not-accepted are spilled", () => {
     const accepted = makeStory("delivered", { points: 3 });
     const unaccepted = makeStory("delivered", { points: 5 });
     const r = closeIteration({
@@ -111,7 +165,7 @@ describe("closeIteration: spilled", () => {
     expect(r.value.spilled[0]!.frontmatter.id).toBe(unaccepted.frontmatter.id);
   });
 
-  test("started/finished stories not in acceptedIds are spilled", () => {
+  test("started/finished not in acceptedIds are spilled", () => {
     const started = makeStory("started", { points: 2 });
     const finished = makeStory("finished", { points: 1 });
     const r = closeIteration({
@@ -138,23 +192,12 @@ describe("closeIteration: spilled", () => {
     expect(r.value.spilled).toHaveLength(0);
   });
 
-  test("already-closed stories (iteration set) are NOT spilled", () => {
-    const old = makeStory("accepted", { iteration: 1, points: 3 });
-    const r = closeIteration({
-      project: project(2),
-      stories: [old],
-      acceptedIds: [],
-    });
-    expect(r.ok).toBe(true);
-    if (!r.ok) return;
-    expect(r.value.spilled).toHaveLength(0);
-  });
-
-  test("rejected stories are NOT spilled", () => {
+  test("accepted/rejected stories are NOT spilled", () => {
+    const acc = makeStory("accepted", { accepted_at: "2026-05-03T10:00:00.000Z" });
     const rej = makeStory("rejected", { reject_reason: "scope" });
     const r = closeIteration({
-      project: project(1),
-      stories: [rej],
+      project: project(2),
+      stories: [acc, rej],
       acceptedIds: [],
     });
     expect(r.ok).toBe(true);
@@ -164,7 +207,7 @@ describe("closeIteration: spilled", () => {
 });
 
 describe("closeIteration: zero accepted", () => {
-  test("empty acceptedIds → project advances, no changed stories, velocity_actual 0", () => {
+  test("empty acceptedIds → project advances, history pushed (vel 0), no story changes", () => {
     const delivered = makeStory("delivered", { points: 3 });
     const r = closeIteration({
       project: project(4),
@@ -176,6 +219,8 @@ describe("closeIteration: zero accepted", () => {
     expect(r.value.changed).toHaveLength(0);
     expect(r.value.velocity_actual).toBe(0);
     expect(r.value.project.current_iteration).toBe(5);
+    expect(r.value.project.iteration_history).toHaveLength(1);
+    expect(r.value.project.iteration_history[0]!.velocity).toBe(0);
   });
 });
 
@@ -203,91 +248,75 @@ describe("closeIteration: errors", () => {
     expect(r.error.kind).toBe("INVALID_TRANSITION");
   });
 
-  test("accepting a story already accepted into THIS iteration is idempotent (no-op)", () => {
-    const already = makeStory("accepted", { iteration: 5, points: 3 });
+  test("accepting an already-accepted story is a no-op (no error)", () => {
+    const already = makeStory("accepted", {
+      points: 3,
+      accepted_at: "2026-05-03T10:00:00.000Z",
+    });
     const r = closeIteration({
-      project: project(5),
+      project: project(2, 0, [], "2026-05-01"),
       stories: [already],
       acceptedIds: [already.frontmatter.id],
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.value.changed).toHaveLength(0);
-  });
-
-  test("accepting a story already accepted into a DIFFERENT iteration → INVALID_TRANSITION", () => {
-    const already = makeStory("accepted", { iteration: 1, points: 3 });
-    const r = closeIteration({
-      project: project(5),
-      stories: [already],
-      acceptedIds: [already.frontmatter.id],
-    });
-    expect(r.ok).toBe(false);
+    // It still counts toward velocity_actual since accepted_at is in window.
+    expect(r.value.velocity_actual).toBe(3);
   });
 });
 
-describe("rollingVelocity", () => {
-  test("zero closed iterations → 0", () => {
-    const s = [makeStory("delivered", { points: 5 })];
-    expect(rollingVelocity(s)).toBe(0);
+describe("rollingVelocityFromHistory", () => {
+  test("zero entries → 0", () => {
+    expect(rollingVelocityFromHistory([])).toBe(0);
   });
 
-  test("one closed iteration → that iteration's points", () => {
-    const a = makeStory("accepted", { iteration: 1, points: 5 });
-    const b = makeStory("accepted", { iteration: 1, points: 3 });
-    expect(rollingVelocity([a, b])).toBe(8);
+  test("one entry → that entry's velocity", () => {
+    expect(
+      rollingVelocityFromHistory([
+        { number: 1, start_date: "a", end_date: "b", velocity: 8 },
+      ]),
+    ).toBe(8);
   });
 
-  test("two closed iterations → average", () => {
-    const i1a = makeStory("accepted", { iteration: 1, points: 5 });
-    const i1b = makeStory("accepted", { iteration: 1, points: 5 }); // 10
-    const i2a = makeStory("accepted", { iteration: 2, points: 8 });
-    const i2b = makeStory("accepted", { iteration: 2, points: 8 }); // 16
-    // avg(10, 16) = 13
-    expect(rollingVelocity([i1a, i1b, i2a, i2b])).toBe(13);
-  });
-
-  test("four closed iterations → avg of last 3 only (window=3)", () => {
-    const make = (it: number, pts: number) =>
-      makeStory("accepted", { iteration: it, points: pts });
-    const stories = [
-      make(1, 8), // dropped (oldest)
-      make(2, 5),
-      make(3, 5),
-      make(4, 8),
+  test("two entries → average", () => {
+    const h: IterationRecord[] = [
+      { number: 1, start_date: "a", end_date: "b", velocity: 10 },
+      { number: 2, start_date: "b", end_date: "c", velocity: 16 },
     ];
-    // last 3 iterations: 2 (5), 3 (5), 4 (8) → avg = 6
-    expect(rollingVelocity(stories)).toBe(6);
+    expect(rollingVelocityFromHistory(h)).toBe(13);
   });
 
-  test("rounds to nearest integer", () => {
-    const i1 = makeStory("accepted", { iteration: 1, points: 5 });
-    const i2 = makeStory("accepted", { iteration: 2, points: 3 });
-    // avg(5, 3) = 4 — exact
-    expect(rollingVelocity([i1, i2])).toBe(4);
-    const i1b = makeStory("accepted", { iteration: 1, points: 5 });
-    const i2b = makeStory("accepted", { iteration: 2, points: 2 });
-    // avg(5, 2) = 3.5 → 4 (round half away from zero per JS Math.round)
-    expect(rollingVelocity([i1b, i2b])).toBe(4);
+  test("four entries → avg of last 3 only (window=3)", () => {
+    const h: IterationRecord[] = [
+      { number: 1, start_date: "a", end_date: "b", velocity: 8 }, // dropped
+      { number: 2, start_date: "b", end_date: "c", velocity: 5 },
+      { number: 3, start_date: "c", end_date: "d", velocity: 5 },
+      { number: 4, start_date: "d", end_date: "e", velocity: 8 },
+    ];
+    // last 3 = [5, 5, 8] → avg = 6
+    expect(rollingVelocityFromHistory(h)).toBe(6);
   });
 
   test("custom windowSize honored", () => {
-    const make = (it: number, pts: number) =>
-      makeStory("accepted", { iteration: it, points: pts });
-    const stories = [make(1, 4), make(2, 8), make(3, 12)];
-    expect(rollingVelocity(stories, { windowSize: 1 })).toBe(12);
-    expect(rollingVelocity(stories, { windowSize: 2 })).toBe(10);
-    expect(rollingVelocity(stories, { windowSize: 5 })).toBe(8);
+    const h: IterationRecord[] = [
+      { number: 1, start_date: "a", end_date: "b", velocity: 4 },
+      { number: 2, start_date: "b", end_date: "c", velocity: 8 },
+      { number: 3, start_date: "c", end_date: "d", velocity: 12 },
+    ];
+    expect(rollingVelocityFromHistory(h, { windowSize: 1 })).toBe(12);
+    expect(rollingVelocityFromHistory(h, { windowSize: 2 })).toBe(10);
+    expect(rollingVelocityFromHistory(h, { windowSize: 5 })).toBe(8);
   });
 });
 
 describe("deliverableStoriesForClose", () => {
-  test("returns only delivered, non-iceboxed, non-stamped stories", () => {
+  test("returns only delivered, non-iceboxed stories", () => {
     const delivered = makeStory("delivered", { points: 3 });
     const started = makeStory("started", { points: 3 });
     const ice = makeStory("delivered", { icebox: true, points: 3 });
-    const old = makeStory("accepted", { iteration: 1, points: 3 });
-    const result = deliverableStoriesForClose([delivered, started, ice, old]);
+    const acc = makeStory("accepted", { accepted_at: "2026-04-01T10:00:00.000Z" });
+    const result = deliverableStoriesForClose([delivered, started, ice, acc]);
     expect(result.map((s) => s.frontmatter.id)).toEqual([delivered.frontmatter.id]);
   });
 });

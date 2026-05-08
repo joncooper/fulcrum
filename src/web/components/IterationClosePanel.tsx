@@ -54,7 +54,6 @@ export function IterationClosePanel({
     const willSpill: StoryDto[] = [];
     for (const s of stories) {
       if (s.icebox) continue;
-      if (s.iteration !== undefined) continue;
       if (s.state === "delivered") deliverable.push(s);
       else if (s.state === "started" || s.state === "finished") willSpill.push(s);
     }

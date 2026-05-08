@@ -1,39 +1,46 @@
 import type { ProjectDto, StoryDto } from "./api.ts";
 
-export type Column = "current" | "backlog" | "icebox" | "done";
+export type Column = "current" | "backlog" | "icebox";
 
 export type ColumnMap = Record<Column, StoryDto[]>;
 
 /**
- * Column derivation — corrected mental model:
+ * Column derivation — time-window model.
  *
- *   - `done`    = stories with `iteration` field stamped (a closed iteration)
  *   - `icebox`  = stories with `icebox: true`
- *   - `current` = stories with state in {started, finished, delivered}
- *                 — i.e. work that's *in flight*. PT-style "what am I on right now."
- *   - `backlog` = stories with state in {unstarted, rejected}
- *                 — not yet begun (rejected is reusable; restart drops it back here).
+ *   - `current` = in-flight (started/finished/delivered) PLUS stories that
+ *                 were accepted within the current iteration window
+ *                 (`accepted_at >= project.iteration_start_date`). Accepted
+ *                 stories carry a visual distinction in the row but live in
+ *                 Current alongside the in-flight work — vintage PT idiom.
+ *   - `backlog` = unstarted, plus rejected (re-bound for restart) — and any
+ *                 stories accepted in a *prior* iteration window are NOT
+ *                 shown on the active board (they belong to history).
  *
- * Velocity is NOT a column-slicer; it's a pace metric (rolling avg of past
- * closed iterations) shown in the header for planning judgement, but the
- * board layout is determined by *story state*, not by some computed cap.
+ * There is no `iteration` field on stories. An iteration is a time window
+ * `[iteration_start_date, end)`; a story is "in" iteration N iff its
+ * `accepted_at` falls in that window.
  *
- * Within each column, stories are ordered by their Lexorank `position` field.
+ * Within each column, stories are ordered by Lexorank `position`.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function deriveColumns(stories: StoryDto[], _project: ProjectDto): ColumnMap {
+export function deriveColumns(stories: StoryDto[], project: ProjectDto): ColumnMap {
   const current: StoryDto[] = [];
   const backlog: StoryDto[] = [];
   const icebox: StoryDto[] = [];
-  const done: StoryDto[] = [];
+  const windowStart = project.iteration_start_date;
 
   for (const s of stories) {
-    if (s.iteration !== undefined) {
-      done.push(s);
-      continue;
-    }
     if (s.icebox) {
       icebox.push(s);
+      continue;
+    }
+    if (s.state === "accepted") {
+      // Belongs to the current iteration window? Show in Current.
+      // Belongs to a prior window? Hidden from active board (would be a
+      // historical iteration view in M2).
+      if (s.accepted_at !== undefined && s.accepted_at.slice(0, 10) >= windowStart) {
+        current.push(s);
+      }
       continue;
     }
     if (s.state === "started" || s.state === "finished" || s.state === "delivered") {
@@ -48,8 +55,6 @@ export function deriveColumns(stories: StoryDto[], _project: ProjectDto): Column
   current.sort(byPosition);
   backlog.sort(byPosition);
   icebox.sort(byPosition);
-  // Done is sorted by iteration (most recent first) so the most-recent close lands at the top.
-  done.sort((a, b) => (b.iteration ?? 0) - (a.iteration ?? 0));
 
-  return { current, backlog, icebox, done };
+  return { current, backlog, icebox };
 }

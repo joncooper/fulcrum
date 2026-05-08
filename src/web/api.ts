@@ -10,13 +10,21 @@ export type StoryDto = {
   epic?: string;
   labels: string[];
   icebox: boolean;
-  iteration?: number;
+  /** ISO 8601 timestamp set by the accept transition. Used to attribute the story to an iteration window. */
+  accepted_at?: string;
   created: string;
   reject_reason?: string;
   title: string;
   body: string;
   path: string;
   hash: string;
+};
+
+export type IterationRecordDto = {
+  number: number;
+  start_date: string;
+  end_date: string;
+  velocity: number;
 };
 
 export type ProjectDto = {
@@ -26,6 +34,7 @@ export type ProjectDto = {
   current_iteration: number;
   iteration_start_date: string;
   iteration_length_days: number;
+  iteration_history: IterationRecordDto[];
   settings: { estimate_scale: number[] };
 };
 

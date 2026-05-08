@@ -5,7 +5,7 @@ id: T-1034-9464
 labels: []
 points: 1
 position: aX
-state: unstarted
+state: delivered
 type: feature
 ---
 

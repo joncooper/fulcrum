@@ -51,8 +51,14 @@ export const StoryFrontmatterSchema = z
     labels: z.array(z.string().min(1)).default([]),
     /** Hide from current/backlog projection. Forbidden when state is terminal. */
     icebox: z.boolean().default(false),
-    /** Only set when state=accepted, at iteration close. Immutable thereafter. */
-    iteration: z.number().int().positive().optional(),
+    /**
+     * ISO 8601 timestamp when the story transitioned to `accepted`. Set by the
+     * accept transition, never edited directly. The story's iteration is
+     * derived: an iteration window [start, end) "contains" this story iff
+     * `start <= accepted_at < end`. There is no `iteration: N` field; stories
+     * don't know their iteration, iterations know their stories (by time).
+     */
+    accepted_at: z.string().datetime({ offset: true }).optional(),
     /** ISO date string (YYYY-MM-DD or full ISO timestamp). */
     created: z.string().min(1),
     /** Required when state=rejected, otherwise omitted. */

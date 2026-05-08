@@ -33,10 +33,10 @@ export function ExpandedStory({
             <span className="meta-val">{story.epic}</span>
           </>
         )}
-        {story.iteration !== undefined && (
+        {story.accepted_at !== undefined && (
           <>
-            <span className="meta-key">iteration</span>
-            <span className="meta-val">{story.iteration}</span>
+            <span className="meta-key">accepted</span>
+            <span className="meta-val">{story.accepted_at}</span>
           </>
         )}
         <span className="meta-key">position</span>

@@ -149,6 +149,16 @@ body {
 [data-theme="dark"] .story.is-dragging {
   background: rgba(255, 255, 255, 0.06);
 }
+.story.is-accepted {
+  background: var(--state-accepted-bg);
+}
+.story.is-accepted .title {
+  color: var(--state-accepted-ink);
+}
+.story.is-accepted:hover {
+  background: var(--state-accepted-bg);
+  filter: brightness(0.97);
+}
 .story .title {
   font-size: 13px;
   color: var(--ink-primary);

@@ -31,14 +31,12 @@ const COLUMN_LABELS: Record<Column, string> = {
   current: "Current",
   backlog: "Backlog",
   icebox: "Icebox",
-  done: "Done",
 };
 
 const COLUMN_TINTS: Record<Column, string> = {
   current: "col-current",
   backlog: "col-backlog",
   icebox: "col-icebox",
-  done: "col-done",
 };
 
 export function Board({

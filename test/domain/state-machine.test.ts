@@ -34,7 +34,7 @@ describe("transition: start", () => {
   });
 
   test("from accepted → INVALID_TRANSITION", () => {
-    const r = transition(baseStory("accepted", { iteration: 5 }), { kind: "start" });
+    const r = transition(baseStory("accepted", { accepted_at: "2026-05-03T10:00:00.000Z" }), { kind: "start" });
     expect(r.ok).toBe(false);
   });
 
@@ -93,7 +93,7 @@ describe("transition: deliver (auto-chain forward)", () => {
 
   test("from accepted (backward) → INVALID_TRANSITION", () => {
     const r = transition(
-      baseStory("accepted", { iteration: 5 }),
+      baseStory("accepted", { accepted_at: "2026-05-03T10:00:00.000Z" }),
       { kind: "deliver" },
     );
     expect(r.ok).toBe(false);
@@ -152,7 +152,7 @@ describe("transition: reject", () => {
 
   test("from accepted → INVALID_TRANSITION (terminal)", () => {
     const r = transition(
-      baseStory("accepted", { iteration: 5 }),
+      baseStory("accepted", { accepted_at: "2026-05-03T10:00:00.000Z" }),
       { kind: "reject", reason: "x" },
     );
     expect(r.ok).toBe(false);

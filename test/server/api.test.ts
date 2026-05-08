@@ -432,10 +432,11 @@ describe("API: POST /api/iteration/close", () => {
     expect(body.accepted_ids).toHaveLength(1);
 
     const story = (await (await fetch(`${server.url}/api/stories/1001`)).json()) as {
-      story: { state: string; iteration: number };
+      story: { state: string; accepted_at?: string };
     };
     expect(story.story.state).toBe("accepted");
-    expect(story.story.iteration).toBe(1);
+    // Iteration is derived from accepted_at + project history, not stamped on the story.
+    expect(story.story.accepted_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
   test("non-existent story id → 404", async () => {

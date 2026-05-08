@@ -1,22 +1,29 @@
 import { err, ok, type FulcrumError, type Result } from "./result.ts";
-import type { Project } from "./schemas/project.ts";
+import type { IterationRecord, Project } from "./schemas/project.ts";
 import type { Story, StoryFrontmatter } from "./schemas/story.ts";
+import { transition } from "./state-machine.ts";
 
 /**
  * Iteration close ritual — PT's signature emotional moment.
  *
- * Mechanically:
- *   1. For each id in `acceptedIds` whose story is in `delivered`, transition to
- *      `accepted` and stamp `iteration: project.current_iteration` (the one
- *      being closed). Stamping is immutable — once a story has an `iteration`
- *      field, it's part of that closed iteration's `done` projection forever.
- *   2. Stories not accepted "spill" — they keep their state and have no
- *      `iteration` field, so the next iteration's projection re-slices them by
- *      velocity (started/finished/delivered stories all sit in the front of
- *      the projection, so they naturally land in the new Current).
- *   3. Increment `project.current_iteration`.
- *   4. Recompute `project.velocity` as the rolling average over the last 3
- *      closed iterations (including the one just closed).
+ * Mechanically (post-refactor: stories no longer carry `iteration: N`):
+ *
+ *   1. For each id in `acceptedIds` whose story is in `delivered`, transition
+ *      to `accepted`. The transition stamps `accepted_at` (now). Stories
+ *      already accepted are no-ops.
+ *   2. velocity_actual = sum of points of stories whose `accepted_at` falls
+ *      within the closing window [iteration_start_date, today). This sweeps
+ *      up chores accepted ad-hoc during the iteration alongside the just-
+ *      accepted features.
+ *   3. Push a record into `project.iteration_history` for the closing window:
+ *      `{ number, start_date, end_date: today, velocity: velocity_actual }`.
+ *   4. Advance: `current_iteration += 1`, `iteration_start_date = today`.
+ *   5. Recompute `project.velocity` as the rolling-3 average over the most
+ *      recent entries in `iteration_history`.
+ *
+ * "Spilled" stories — delivered/started/finished that were not accepted —
+ * keep their state. Their `accepted_at` is unset, so they're not attributed
+ * to the closing iteration; they continue into the next.
  */
 
 export type CloseIterationInput = {
@@ -28,13 +35,13 @@ export type CloseIterationInput = {
 };
 
 export type CloseIterationResult = {
-  /** Updated project with bumped current_iteration + new velocity. */
+  /** Updated project: bumped current_iteration, advanced start_date, history pushed, velocity recomputed. */
   project: Project;
-  /** Stories that changed (got iteration stamped + state transitioned). */
+  /** Stories that changed state in this close (newly-accepted only). */
   changed: Story[];
-  /** Sum of points of the just-closed iteration (the actual velocity for it). */
+  /** Sum of points of all stories whose accepted_at fell in the closing window. */
   velocity_actual: number;
-  /** Stories from current projection that did NOT make it into the close. */
+  /** Stories that were eligible (delivered/started/finished, not iceboxed) but not accepted. */
   spilled: Story[];
 };
 
@@ -46,6 +53,7 @@ export function closeIteration(
   const { project, stories, acceptedIds } = input;
   const closing = project.current_iteration;
   const acceptedSet = new Set(acceptedIds);
+  const today = new Date().toISOString().slice(0, 10);
 
   const byId = new Map<string, Story>();
   for (const s of stories) byId.set(s.frontmatter.id, s);
@@ -63,60 +71,64 @@ export function closeIteration(
         message: `cannot accept ${id}: not found in story set`,
       });
     }
-    const fm = story.frontmatter;
-    if (fm.state === "accepted" && fm.iteration === closing) {
-      // Already accepted into this iteration — no-op (idempotent close).
+    if (story.frontmatter.state === "accepted") {
+      // Already accepted (e.g. ad-hoc chore accept earlier in the iteration).
+      // No-op — accepted_at is already set, will be counted in velocity below.
       continue;
     }
-    if (fm.state !== "delivered") {
-      return err({
-        kind: "INVALID_TRANSITION",
-        message: `cannot accept ${id} into iteration ${closing}: state is ${fm.state}, expected delivered`,
-      });
-    }
-    const next: StoryFrontmatter = { ...fm, state: "accepted", iteration: closing };
-    changed.push({ frontmatter: next, body: story.body });
+    const result = transition(story.frontmatter, { kind: "accept" });
+    if (!result.ok) return result;
+    changed.push({ frontmatter: result.value, body: story.body });
   }
 
-  const closedPoints = changed.reduce(
-    (sum, s) => sum + (s.frontmatter.points ?? 0),
-    0,
-  );
-
-  // Spilled: stories that the panel WOULD have offered (current projection,
-  // ie not iceboxed and not already in a closed iteration) but the user did
-  // not accept. Used by the UI to phrase the spill summary; the domain layer
-  // doesn't mutate them.
-  const spilled: Story[] = [];
-  for (const s of stories) {
-    const fm = s.frontmatter;
-    if (fm.icebox) continue;
-    if (fm.iteration !== undefined) continue;
-    if (acceptedSet.has(fm.id)) continue;
-    if (fm.state === "accepted" || fm.state === "rejected") continue;
-    spilled.push(s);
-  }
-
-  // Build the post-close story set for velocity recomputation.
+  // Build the post-close projection so velocity_actual reflects the just-accepted
+  // changes, not the pre-close state.
   const postClose = stories.map((s) => {
     const replacement = changed.find((c) => c.frontmatter.id === s.frontmatter.id);
     return replacement ?? s;
   });
-  const newVelocity = rollingVelocity(postClose, { windowSize: ROLLING_WINDOW });
+
+  // velocity_actual: sum points of stories whose accepted_at falls in the
+  // closing window [iteration_start_date, today]. We use date-only comparison
+  // (slice the timestamp) so a story accepted any time today still counts.
+  const windowStart = project.iteration_start_date;
+  const velocity_actual = postClose.reduce((sum, s) => {
+    if (s.frontmatter.state !== "accepted") return sum;
+    const at = s.frontmatter.accepted_at;
+    if (at === undefined) return sum;
+    const day = at.slice(0, 10);
+    if (day < windowStart) return sum;
+    return sum + (s.frontmatter.points ?? 0);
+  }, 0);
+
+  const newRecord: IterationRecord = {
+    number: closing,
+    start_date: windowStart,
+    end_date: today,
+    velocity: velocity_actual,
+  };
+  const newHistory = [...project.iteration_history, newRecord];
+
+  const spilled: Story[] = [];
+  for (const s of postClose) {
+    const fm = s.frontmatter;
+    if (fm.icebox) continue;
+    if (fm.state === "accepted" || fm.state === "rejected") continue;
+    spilled.push(s);
+  }
 
   const newProject: Project = {
     ...project,
     current_iteration: closing + 1,
-    velocity: newVelocity,
-    // Roll the iteration window forward to today on close (PT-style: a fresh
-    // iteration starts when you close the previous one).
-    iteration_start_date: new Date().toISOString().slice(0, 10),
+    iteration_start_date: today,
+    iteration_history: newHistory,
+    velocity: rollingVelocityFromHistory(newHistory, { windowSize: ROLLING_WINDOW }),
   };
 
   return ok({
     project: newProject,
     changed,
-    velocity_actual: closedPoints,
+    velocity_actual,
     spilled,
   });
 }
@@ -127,47 +139,27 @@ export type RollingVelocityOptions = {
 };
 
 /**
- * Compute the rolling-average velocity over the last N closed iterations.
- * "Closed iteration" = stories with an `iteration` field stamped.
- *
- * Returns `Math.round(avg)` so the stored project velocity is an integer
- * matching the schema constraint (z.number().int().nonnegative()).
- *
- * If zero closed iterations, returns 0. Caller may decide what to do with
- * that (UI shows "no historical pace yet").
+ * Rolling-average velocity over the most recent `windowSize` iteration history
+ * records. Returns 0 when no closed iterations exist.
  */
-export function rollingVelocity(
-  stories: Story[],
+export function rollingVelocityFromHistory(
+  history: readonly IterationRecord[],
   opts: RollingVelocityOptions = {},
 ): number {
   const windowSize = opts.windowSize ?? ROLLING_WINDOW;
-  const byIter = new Map<number, number>();
-  for (const s of stories) {
-    const it = s.frontmatter.iteration;
-    if (it === undefined) continue;
-    const points = s.frontmatter.points ?? 0;
-    byIter.set(it, (byIter.get(it) ?? 0) + points);
-  }
-  if (byIter.size === 0) return 0;
-  const recent = [...byIter.keys()].sort((a, b) => b - a).slice(0, windowSize);
-  const sum = recent.reduce((acc, it) => acc + (byIter.get(it) ?? 0), 0);
+  if (history.length === 0) return 0;
+  const recent = history.slice(-windowSize);
+  const sum = recent.reduce((acc, r) => acc + r.velocity, 0);
   return Math.round(sum / recent.length);
 }
 
 /**
- * Stories that the close panel offers for accept/unaccept selection. These are
- * the stories in the *current* iteration projection that have already been
- * delivered. (Started/finished stories aren't ready to accept; they spill
- * automatically without UI action.)
- *
- * The UI uses this to populate the panel; tests assert it matches the design
- * plan's Journey C step 2.
+ * Stories the close panel offers for accept/unaccept selection: delivered
+ * stories not in the icebox. After the refactor (no `iteration` field on
+ * stories) this is just a state filter.
  */
 export function deliverableStoriesForClose(stories: Story[]): Story[] {
   return stories.filter(
-    (s) =>
-      !s.frontmatter.icebox &&
-      s.frontmatter.iteration === undefined &&
-      s.frontmatter.state === "delivered",
+    (s) => !s.frontmatter.icebox && s.frontmatter.state === "delivered",
   );
 }
