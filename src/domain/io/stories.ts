@@ -20,6 +20,17 @@ import { slugify } from "../slug.ts";
 const STORY_FILENAME_RE = /^(T-\d+-[0-9a-f]{4})(?:-.*)?\.md$/;
 
 /**
+ * Build an IO_ERROR message that includes the errno code (e.g. ENOSPC,
+ * EACCES) when one is present on the cause. Consumers downstream (CLI, web
+ * toast) parse the code from the message to differentiate disk-full from
+ * permission-denied from other IO failures.
+ */
+function ioErrorMessage(prefix: string, cause: unknown): string {
+  const code = (cause as NodeJS.ErrnoException | undefined)?.code;
+  return code ? `${prefix} (${code})` : prefix;
+}
+
+/**
  * Build the temp path for an atomic write. Form: `<storiesDir>/.{seq}-tmp-{uuid}`.
  *
  * - Leading dot keeps it hidden from `ls` and from chokidar's default scan.
@@ -121,7 +132,7 @@ export async function createStory(
     } catch (cause) {
       return err({
         kind: "IO_ERROR",
-        message: `failed to write temp file ${tmpPath}`,
+        message: ioErrorMessage(`failed to write temp file ${tmpPath}`, cause),
         cause,
       });
     }
@@ -358,7 +369,7 @@ export async function writeStoryAtomic(opts: {
     }
     return err({
       kind: "IO_ERROR",
-      message: `failed to write ${opts.path}`,
+      message: ioErrorMessage(`failed to write ${opts.path}`, cause),
       cause,
     });
   }

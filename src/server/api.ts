@@ -553,6 +553,33 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
       return json({ error: closeResult.error }, status);
     }
 
+    // Pre-write project.yml CAS check: re-read the file and verify its hash
+    // matches what we loaded at the top of the handler. If project.yml has
+    // changed underneath since the initial load, bail BEFORE writing any
+    // story files — otherwise we'd leave stories stamped with iteration:N
+    // while project.yml still reflects the old current_iteration (codex
+    // P1 finding: "partial close on project CAS failure").
+    //
+    // This narrows the race window to "just the story write loop"; if
+    // another writer slips in during that window, the final project write
+    // below still surfaces STALE_WRITE — but the more common case (someone
+    // edited project.yml in the seconds before the close panel was committed)
+    // is caught here, before any story files mutate.
+    const projectPeek = loadProjectWithHash(project);
+    if (!projectPeek.ok) return json({ error: projectPeek.error }, 500);
+    if (projectPeek.value.hash !== projectHash) {
+      return json(
+        {
+          error: {
+            kind: "STALE_WRITE",
+            message: `project.yml changed during close ritual; reload and retry`,
+            currentHash: projectPeek.value.hash,
+          },
+        },
+        409,
+      );
+    }
+
     // Persist each changed story (CAS-on-hash so concurrent edits surface as STALE_WRITE).
     const writtenIds: string[] = [];
     for (const updated of closeResult.value.changed) {
@@ -581,9 +608,12 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
       writtenIds.push(updated.frontmatter.id);
     }
 
-    // Persist the new project.yml with CAS-on-hash. If another process wrote
-    // project.yml between our load and now, surface STALE_WRITE so the caller
-    // can retry on fresh state.
+    // Persist the new project.yml with CAS-on-hash. If another process slipped
+    // in during the narrow window between the pre-check and now, surface
+    // STALE_WRITE. The stamped stories are now committed; this is the residual
+    // risk noted in the close-ritual race analysis (M1 ship-accepted: solo
+    // workflow rarely hits it, and `iteration:N` stamps are idempotent under
+    // re-close at the same N).
     const projWritten = await writeProjectAtomic(project, closeResult.value.project, {
       expectedHash: projectHash,
     });

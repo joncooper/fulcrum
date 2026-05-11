@@ -138,9 +138,12 @@ export async function writeProjectAtomic(
     } catch {
       /* best effort */
     }
+    const code = (cause as NodeJS.ErrnoException | undefined)?.code;
     return err({
       kind: "IO_ERROR",
-      message: `failed to write ${p.projectFile}`,
+      message: code
+        ? `failed to write ${p.projectFile} (${code})`
+        : `failed to write ${p.projectFile}`,
       cause,
     });
   }

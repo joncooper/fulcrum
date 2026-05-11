@@ -145,8 +145,10 @@ export function useTransitionStory() {
     },
     onMutate: async (vars) => {
       // Optimistic: apply state change locally so UI is instant; revert on error.
+      // The cache shape is `StoriesResponse` ({stories, malformed}), not bare
+      // `StoryDto[]`; map inside the wrapper.
       await qc.cancelQueries({ queryKey: ["stories"] });
-      const prev = qc.getQueryData<StoryDto[]>(["stories"]);
+      const prev = qc.getQueryData<StoriesResponse>(["stories"]);
       if (prev) {
         const optimistic: StoryDto["state"] | null =
           vars.verb === "start" ? "started"
@@ -157,16 +159,18 @@ export function useTransitionStory() {
           : vars.verb === "restart" ? "started"
           : null;
         if (optimistic) {
-          qc.setQueryData<StoryDto[]>(
-            ["stories"],
-            prev.map((s) => (s.id === vars.id ? { ...s, state: optimistic } : s)),
-          );
+          qc.setQueryData<StoriesResponse>(["stories"], {
+            ...prev,
+            stories: prev.stories.map((s) =>
+              s.id === vars.id ? { ...s, state: optimistic } : s,
+            ),
+          });
         }
       }
       return { prev };
     },
     onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["stories"], ctx.prev);
+      if (ctx?.prev) qc.setQueryData<StoriesResponse>(["stories"], ctx.prev);
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["stories"] });
@@ -301,18 +305,23 @@ export function useUpdateStoryPosition() {
       return body;
     },
     onMutate: async (vars) => {
+      // Cache shape is `StoriesResponse` ({stories, malformed}); update inside
+      // the wrapper.
       await qc.cancelQueries({ queryKey: ["stories"] });
-      const prev = qc.getQueryData<StoryDto[]>(["stories"]);
+      const prev = qc.getQueryData<StoriesResponse>(["stories"]);
       if (prev) {
-        const next = prev
+        const nextStories = prev.stories
           .map((s) => (s.id === vars.id ? { ...s, position: vars.position } : s))
           .sort((a, b) => (a.position < b.position ? -1 : 1));
-        qc.setQueryData<StoryDto[]>(["stories"], next);
+        qc.setQueryData<StoriesResponse>(["stories"], {
+          ...prev,
+          stories: nextStories,
+        });
       }
       return { prev };
     },
     onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(["stories"], ctx.prev);
+      if (ctx?.prev) qc.setQueryData<StoriesResponse>(["stories"], ctx.prev);
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ["stories"] });

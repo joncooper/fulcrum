@@ -18,6 +18,7 @@ import type {
   StoryPatch,
   TransitionVerb,
 } from "../api.ts";
+import { generateKeyBetween } from "fractional-indexing";
 import { useUpdateStory, useUpdateStoryPosition } from "../api.ts";
 import { deriveColumns, type Column } from "../columns.ts";
 import type { FocusState } from "../keyboard.ts";
@@ -170,25 +171,27 @@ export function Board({
       return;
     }
 
-    // Cross-column drop. Compute the new position relative to destination
-    // column. Insert at the dropped-on row's position, or append to end if
-    // the drop landed on the column container.
+    // Cross-column drop. Compute the new position by picking a rank strictly
+    // between the predecessor and successor at `overIdx` in the destination
+    // list. We can't use `computeBetween` here — that helper short-circuits
+    // when oldIdx==newIdx (which is the case for cross-column inserts at
+    // every position). Call `generateKeyBetween` directly with the neighbor
+    // positions from destList.
     const destList = columns[destCol];
     const overIdx =
       overStoryId === null
         ? destList.length // drop at end
         : destList.findIndex((s) => s.id === overStoryId);
     if (overIdx === -1) return;
-
-    // Pretend `moved` is being inserted at `overIdx` of destList. Use
-    // computeBetween on a synthetic list with the dragged story at that idx.
-    const synthetic = [
-      ...destList.slice(0, overIdx),
-      moved,
-      ...destList.slice(overIdx),
-    ];
-    const nextPos = computeBetween(synthetic, overIdx, overIdx);
-    if (nextPos === null) return;
+    const prev = overIdx > 0 ? destList[overIdx - 1]!.position : null;
+    const next = overIdx < destList.length ? destList[overIdx]!.position : null;
+    let nextPos: string;
+    try {
+      nextPos = generateKeyBetween(prev, next);
+    } catch {
+      // Should never happen with valid Lexorank ranks, but be defensive.
+      return;
+    }
 
     const willIcebox = destCol === "icebox";
     const wasIcebox = sourceCol === "icebox";
