@@ -1,11 +1,12 @@
 ---
+accepted_at: 2026-05-11T20:11:01.732Z
 created: 2026-05-08
 icebox: false
 id: T-1031-31a1
 labels: []
 points: 2
 position: aU
-state: unstarted
+state: accepted
 type: feature
 ---
 

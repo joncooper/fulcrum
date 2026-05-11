@@ -14,11 +14,15 @@ Terminal-agent loops (Claude Code, Codex, Cursor) are low-friction for *making c
 
 ## Status
 
-Design phase. No code yet.
+M1 in flight, dogfooding on its own backlog. The CLI, server, and web UI all
+work; you can clone this repo and `bun run ./bin/fulcrum serve` to drive the
+board against `.fulcrum/`. Iteration semantics, atomic writes, CAS-on-hash,
+keyboard model, and mobile read-only mode are shipped. Remaining M1 work tracked
+in `.fulcrum/stories/`.
 
 Canonical design doc: [`~/.gstack/projects/fulcrum/jdc-main-design-20260507-154520.md`](file:///Users/jdc/.gstack/projects/fulcrum/jdc-main-design-20260507-154520.md) (three review passes, APPROVED 2026-05-07).
 
-## Architecture (planned)
+## Architecture
 
 **Two surfaces, same data:**
 
@@ -27,7 +31,21 @@ Canonical design doc: [`~/.gstack/projects/fulcrum/jdc-main-design-20260507-1545
 
 **Storage:** a `.fulcrum/` directory committed to the project's own git repo. Markdown + YAML frontmatter for tickets. Git is the sync layer. No backend, no accounts, no cloud.
 
-**Stack (planned):** Bun + Vite + React 19 + @dnd-kit + zod + @tanstack/react-query + chokidar.
+**Stack:** Bun + Vite + React 19 + @dnd-kit + zod + @tanstack/react-query + chokidar.
+
+## Run it
+
+```bash
+bun install
+bun run ./bin/fulcrum init       # first time only, creates .fulcrum/
+bun run ./bin/fulcrum serve      # board at http://127.0.0.1:3737
+bun test                         # run the test suite
+bun run check                    # typecheck
+```
+
+CLI subcommands: `init`, `new`, `list`, `show`, `edit`, `rm`, `start`,
+`finish`, `deliver`, `accept`, `reject`, `restart`, `serve`. Most subcommands
+accept `--json` for agent callers.
 
 ## Roadmap
 

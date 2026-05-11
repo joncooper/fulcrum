@@ -1,3 +1,4 @@
+import { runDoctor } from "./commands/doctor.ts";
 import { runEdit } from "./commands/edit.ts";
 import { runInit } from "./commands/init.ts";
 import { runList } from "./commands/list.ts";
@@ -28,6 +29,9 @@ Commands (M1):
   accept <id>              Transition delivered → accepted.
   reject <id> --reason X   Transition started/finished/delivered → rejected.
   restart <id>             Transition rejected → started.
+  doctor                   Surface filesystem anomalies (malformed frontmatter,
+                           ID collisions, orphan temp files, long Lexorank ranks).
+                           Flags: --fix --json
   serve                    Boot the web UI + HTTP API on http://127.0.0.1:3737
                            Flags: --port N --host X
 
@@ -74,6 +78,8 @@ export async function main(argv: string[]): Promise<number> {
     case "remove":
     case "delete":
       return runRm(rest);
+    case "doctor":
+      return runDoctor(rest);
     case "serve":
       return runServe(rest);
     default:

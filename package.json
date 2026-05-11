@@ -10,6 +10,8 @@
   },
   "scripts": {
     "test": "bun test",
+    "test:e2e": "bun run build:web && playwright test",
+    "build:web": "vite build",
     "check": "bun tsc --noEmit",
     "fulcrum": "bun run ./bin/fulcrum"
   },
@@ -29,6 +31,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/bun": "latest",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

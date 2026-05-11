@@ -28,14 +28,45 @@ export type RunningServer = {
   stop: () => Promise<void>;
 };
 
+// Fallback page served when the web UI hasn't been built yet (i.e. no
+// dist/web/ alongside this server). Tokens here mirror DESIGN.md root vars
+// (warm-paper canvas, surface tint, primary ink) so the page reads like the
+// real product even before the SPA exists. Light/dark via CSS prefers-color-
+// scheme media query; matches the design's DAY/DARK posture.
 const FALLBACK_HTML = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>fulcrum</title>
 <style>
-  body { font-family: 'IBM Plex Sans', system-ui, sans-serif; background: #fbf8f1; color: #1c1917; max-width: 60ch; margin: 4rem auto; padding: 0 1.5rem; line-height: 1.5; }
-  code { background: #f5efde; padding: 0.1em 0.35em; border-radius: 2px; font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 0.9em; }
+  :root {
+    --bg-app: #fbf8f1;
+    --bg-surface: #f5efde;
+    --ink-primary: #1c1917;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-app: #1f1b16;
+      --bg-surface: #2a241e;
+      --ink-primary: #f5efde;
+    }
+  }
+  body {
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    background: var(--bg-app);
+    color: var(--ink-primary);
+    max-width: 60ch;
+    margin: 4rem auto;
+    padding: 0 1.5rem;
+    line-height: 1.5;
+  }
+  code {
+    background: var(--bg-surface);
+    padding: 0.1em 0.35em;
+    border-radius: 2px;
+    font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    font-size: 0.9em;
+  }
 </style>
 </head>
 <body>

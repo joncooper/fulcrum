@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { StoryDto, TransitionVerb } from "./api.ts";
+import type { Column } from "./columns.ts";
 
 export type FocusState = {
   focusedId: string | null;
@@ -13,9 +14,16 @@ const TRANSITION_KEYS: Record<string, TransitionVerb> = {
   a: "accept",
 };
 
+const VISIBLE_COLUMNS: Column[] = ["current", "backlog", "icebox"];
+
+/** Window within which two `g` presses register as `g g` (vim-style). */
+const GG_DOUBLE_TAP_MS = 700;
+
 export function useKeyboard(opts: {
   /** Flat list of stories in display order (for j/k navigation). */
   stories: StoryDto[];
+  /** Stories grouped by visible column — needed for h/l, g g, G column-aware nav. */
+  columns?: Record<Column, StoryDto[]>;
   focus: FocusState;
   setFocus: (next: FocusState) => void;
   onTransition: (id: string, verb: TransitionVerb, reason?: string) => void;
@@ -23,7 +31,7 @@ export function useKeyboard(opts: {
   onEdit?: (id: string) => void;
   /** Delete the focused story after confirmation (called for the `D` keystroke). */
   onDelete?: (id: string) => void;
-  /** Toggle icebox on the focused story (called for the `i` keystroke). */
+  /** Toggle icebox on the focused story (called for the `I` keystroke — capital). */
   onToggleIcebox?: (id: string) => void;
   /** Move the focused story up or down within its column (J / K keystrokes). */
   onMove?: (id: string, direction: "up" | "down") => void;
@@ -32,6 +40,7 @@ export function useKeyboard(opts: {
 }) {
   const {
     stories,
+    columns,
     focus,
     setFocus,
     onTransition,
@@ -41,6 +50,10 @@ export function useKeyboard(opts: {
     onMove,
     enabled = true,
   } = opts;
+
+  // Track the timestamp of the last `g` press so a second `g` within
+  // GG_DOUBLE_TAP_MS triggers the "go to top of column" action.
+  const lastGAt = useRef<number>(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -81,6 +94,55 @@ export function useKeyboard(opts: {
         if (stories[prevIdx]) setFocus({ ...focus, focusedId: stories[prevIdx].id });
         return;
       }
+
+      // h / l: move focus between columns. Lands on first story of target column.
+      if ((e.key === "h" || e.key === "l" || e.key === "ArrowLeft" || e.key === "ArrowRight") && columns) {
+        const dir = e.key === "h" || e.key === "ArrowLeft" ? -1 : 1;
+        const currentCol = focusedColumn(focus.focusedId, columns);
+        const startIdx = currentCol === null ? 0 : VISIBLE_COLUMNS.indexOf(currentCol);
+        // Walk to the next non-empty column in that direction; wrap.
+        for (let step = 1; step <= VISIBLE_COLUMNS.length; step++) {
+          const targetIdx = (startIdx + dir * step + VISIBLE_COLUMNS.length) % VISIBLE_COLUMNS.length;
+          const target = VISIBLE_COLUMNS[targetIdx]!;
+          const list = columns[target];
+          if (list.length > 0) {
+            e.preventDefault();
+            setFocus({ ...focus, focusedId: list[0]!.id });
+            return;
+          }
+        }
+        return;
+      }
+
+      // G: go to bottom of focused column.
+      if (e.key === "G" && columns) {
+        const col = focusedColumn(focus.focusedId, columns) ?? "current";
+        const list = columns[col];
+        if (list.length > 0) {
+          e.preventDefault();
+          setFocus({ ...focus, focusedId: list[list.length - 1]!.id });
+        }
+        return;
+      }
+
+      // g g: two-tap g jumps to top of focused column. First `g` arms; second
+      // within GG_DOUBLE_TAP_MS fires.
+      if (e.key === "g" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && columns) {
+        const now = Date.now();
+        if (now - lastGAt.current < GG_DOUBLE_TAP_MS) {
+          lastGAt.current = 0;
+          const col = focusedColumn(focus.focusedId, columns) ?? "current";
+          const list = columns[col];
+          if (list.length > 0) {
+            e.preventDefault();
+            setFocus({ ...focus, focusedId: list[0]!.id });
+          }
+        } else {
+          lastGAt.current = now;
+        }
+        return;
+      }
+
       if (e.key === " ") {
         e.preventDefault();
         if (focus.focusedId) {
@@ -125,7 +187,9 @@ export function useKeyboard(opts: {
         onDelete(focus.focusedId);
         return;
       }
-      if (e.key === "i" && focus.focusedId && onToggleIcebox) {
+      // Capital-I (shift+i) for icebox toggle. Lowercase `i` opens the
+      // iteration close panel (App.tsx) — PT-vernacular.
+      if (e.key === "I" && focus.focusedId && onToggleIcebox) {
         e.preventDefault();
         onToggleIcebox(focus.focusedId);
       }
@@ -134,6 +198,7 @@ export function useKeyboard(opts: {
     return () => window.removeEventListener("keydown", handler);
   }, [
     stories,
+    columns,
     focus,
     setFocus,
     onTransition,
@@ -143,4 +208,15 @@ export function useKeyboard(opts: {
     onMove,
     enabled,
   ]);
+}
+
+function focusedColumn(
+  focusedId: string | null,
+  columns: Record<Column, StoryDto[]>,
+): Column | null {
+  if (!focusedId) return null;
+  for (const c of VISIBLE_COLUMNS) {
+    if (columns[c].some((s) => s.id === focusedId)) return c;
+  }
+  return null;
 }

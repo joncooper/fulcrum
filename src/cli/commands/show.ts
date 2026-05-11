@@ -45,6 +45,7 @@ export async function runShow(args: string[]): Promise<number> {
   if (fm.labels.length > 0) out.write(`  labels:    ${fm.labels.join(", ")}\n`);
   if (fm.icebox) out.write(`  icebox:    true\n`);
   if (fm.accepted_at !== undefined) out.write(`  accepted:  ${fm.accepted_at}\n`);
+  if (fm.iteration !== undefined) out.write(`  iteration: ${fm.iteration}\n`);
   if (fm.reject_reason) out.write(`  rejected:  ${fm.reject_reason}\n`);
   out.write(`  position:  ${fm.position}\n`);
   out.write(`  created:   ${fm.created}\n`);

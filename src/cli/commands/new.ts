@@ -1,6 +1,10 @@
+import { loadProject } from "../../domain/io/project.ts";
 import { createStory, listStories } from "../../domain/io/stories.ts";
 import { between } from "../../domain/position.ts";
-import type { StoryType } from "../../domain/schemas/story.ts";
+import {
+  validatePointsAgainstScale,
+  type StoryType,
+} from "../../domain/schemas/story.ts";
 import { emitError, emitOk, failNoProject, findProjectRoot, parseArgs } from "../util.ts";
 
 const VALID_TYPES: readonly StoryType[] = ["feature", "bug", "chore", "release"];
@@ -41,6 +45,21 @@ export async function runNew(args: string[]): Promise<number> {
     }
     points = n;
   }
+
+  // Validate points against the project's estimate_scale.
+  if (points !== undefined) {
+    const projResult = loadProject(proj);
+    if (projResult.ok) {
+      const scaleErr = validatePointsAgainstScale(
+        points,
+        projResult.value.settings.estimate_scale,
+      );
+      if (scaleErr !== null) {
+        emitError("fulcrum new", { kind: "INVALID_FRONTMATTER", message: scaleErr }, json);
+        return 1;
+      }
+    }
+  }
   const labels =
     typeof flags.labels === "string"
       ? flags.labels.split(",").map((s) => s.trim()).filter(Boolean)
@@ -76,19 +95,12 @@ export async function runNew(args: string[]): Promise<number> {
     points,
     position,
     labels,
+    epic,
   });
 
   if (!result.ok) {
     emitError("fulcrum new", result.error, json);
     return 1;
-  }
-
-  // If user passed --epic, write it via a follow-up edit (createStory doesn't
-  // currently take epic; keep that in scope). Defer to `fulcrum edit` for now.
-  if (epic !== undefined) {
-    process.stderr.write(
-      "fulcrum new: --epic ignored in this build; edit the file or use `fulcrum edit` (M1.x)\n",
-    );
   }
 
   emitOk(

@@ -264,21 +264,22 @@ describe("CLI dogfooding flow", () => {
     expect(content).not.toContain("# old title");
   });
 
-  test("edit changes points + type", async () => {
+  test("edit type → bug requires clearing points (non-feature types are non-estimable)", async () => {
     await main(["init"]);
     await main(["new", "feature", "x", "--points", "1"]);
     stdoutChunks = [];
-    expect(await main(["edit", "1001", "--points", "8", "--type", "bug"])).toBe(0);
+    // Two-step: clear points first, then change type — schema rejects bug with points.
+    expect(await main(["edit", "1001", "--points", "-", "--type", "bug"])).toBe(0);
     stdoutChunks = [];
     await main(["show", "1001"]);
     const out = stdout();
     expect(out).toContain("type:      bug");
-    expect(out).toContain("points:    8");
+    expect(out).not.toContain("points:");
   });
 
-  test("edit --points - clears points (chore)", async () => {
+  test("edit --points - clears points (chore created without points)", async () => {
     await main(["init"]);
-    await main(["new", "chore", "do laundry", "--points", "1"]);
+    await main(["new", "chore", "do laundry"]);
     stdoutChunks = [];
     expect(await main(["edit", "1001", "--points", "-"])).toBe(0);
     stdoutChunks = [];
@@ -336,5 +337,63 @@ describe("CLI dogfooding flow", () => {
     const content = readFileSync(join(dir, files[0]!), "utf-8");
     expect(content).toContain("# kept title");
     expect(content).toContain("Now with detail.");
+  });
+
+  test("new --epic stamps the epic field", async () => {
+    await main(["init"]);
+    stdoutChunks = [];
+    expect(await main(["new", "feature", "x", "--points", "1", "--epic", "growth-loop"])).toBe(0);
+    stdoutChunks = [];
+    await main(["show", "1001"]);
+    expect(stdout()).toContain("epic:      growth-loop");
+  });
+
+  test("doctor: clean repo reports all clear", async () => {
+    await main(["init"]);
+    await main(["new", "feature", "x", "--points", "1"]);
+    stdoutChunks = [];
+    expect(await main(["doctor"])).toBe(0);
+    expect(stdout()).toContain("all clear");
+  });
+
+  test("doctor: detects orphan temp files in stories/", async () => {
+    await main(["init"]);
+    await main(["new", "feature", "x", "--points", "1"]);
+    const dir = join(cwd, ".fulcrum/stories");
+    const fs = await import("node:fs/promises");
+    // Create an orphan temp file matching the `.{seq}-tmp-{uuid}` pattern.
+    await fs.writeFile(join(dir, ".9999-tmp-deadbeefcafebabe"), "leftover\n");
+    stdoutChunks = [];
+    expect(await main(["doctor"])).toBe(0);
+    expect(stdout()).toContain("orphan temp files (1)");
+    expect(stdout()).toContain(".9999-tmp-");
+  });
+
+  test("doctor --fix: deletes orphan temp files", async () => {
+    await main(["init"]);
+    await main(["new", "feature", "x", "--points", "1"]);
+    const dir = join(cwd, ".fulcrum/stories");
+    const fs = await import("node:fs/promises");
+    await fs.writeFile(join(dir, ".9999-tmp-deadbeefcafebabe"), "leftover\n");
+    stdoutChunks = [];
+    expect(await main(["doctor", "--fix"])).toBe(0);
+    expect(stdout()).toContain("deleted 1 orphan temp");
+    const remaining = await fs.readdir(dir);
+    expect(remaining.some((e) => /-tmp-/.test(e))).toBe(false);
+  });
+
+  test("doctor --json: structured report shape", async () => {
+    await main(["init"]);
+    await main(["new", "feature", "x", "--points", "1"]);
+    stdoutChunks = [];
+    expect(await main(["doctor", "--json"])).toBe(0);
+    const out = stdout().trim();
+    const report = JSON.parse(out);
+    expect(report.ok).toBe(true);
+    expect(report.all_clear).toBe(true);
+    expect(Array.isArray(report.malformed)).toBe(true);
+    expect(Array.isArray(report.orphan_temps)).toBe(true);
+    expect(Array.isArray(report.id_collisions)).toBe(true);
+    expect(Array.isArray(report.long_ranks)).toBe(true);
   });
 });

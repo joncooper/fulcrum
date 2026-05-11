@@ -7,8 +7,10 @@ export const ProjectSettingsSchema = z
   .default({});
 
 /**
- * One closed iteration's record. Iterations are time windows: a story belongs
- * to iteration N iff its `accepted_at` falls within [start_date, end_date).
+ * One closed iteration's record. The close ritual stamps `iteration: N` on
+ * each accepted story in the closing window, then pushes this record into
+ * `iteration_history`. `velocity` is the sum of points of stories stamped
+ * with this number.
  */
 export const IterationRecordSchema = z.object({
   number: z.number().int().positive(),
@@ -16,7 +18,7 @@ export const IterationRecordSchema = z.object({
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "start_date must be YYYY-MM-DD"),
   /** First day AFTER the window, exclusive (YYYY-MM-DD) — i.e. the next iteration's start_date. */
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "end_date must be YYYY-MM-DD"),
-  /** Sum of points of stories whose accepted_at fell in this window. */
+  /** Sum of points of stories stamped with this iteration number. */
   velocity: z.number().int().nonnegative(),
 });
 

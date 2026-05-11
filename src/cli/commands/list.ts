@@ -46,6 +46,7 @@ export async function runList(args: string[]): Promise<number> {
         position: s.story.frontmatter.position,
         icebox: s.story.frontmatter.icebox,
         accepted_at: s.story.frontmatter.accepted_at ?? null,
+        iteration: s.story.frontmatter.iteration ?? null,
         labels: s.story.frontmatter.labels,
         path: s.path,
       })),

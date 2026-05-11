@@ -37,15 +37,19 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
         <Section title="Navigate">
           <Row k="j / k" v="focus next / previous story" />
           <Row k="↑ / ↓" v="same as k / j" />
+          <Row k="h / l" v="move focus between columns" />
+          <Row k="g g" v="jump to top of focused column" />
+          <Row k="G" v="jump to bottom of focused column" />
           <Row k="space" v="expand / collapse focused story" />
           <Row k="esc" v="collapse / cancel" />
+          <Row k="/" v="search the board" />
         </Section>
         <Section title="Create + edit">
-          <Row k="n" v="new story (form opens at top of Backlog)" />
+          <Row k="c" v="new story (form opens at top of Current)" />
           <Row k="e" v="edit focused story inline" />
           <Row k="⌘↵" v="save edit / create" />
           <Row k="J / K" v="move focused story down / up within its column" />
-          <Row k="i" v="toggle icebox on focused story" />
+          <Row k="I" v="toggle icebox on focused story (capital)" />
           <Row k="D" v="delete focused story (capital — intentional friction)" />
         </Section>
         <Section title="State transitions">
@@ -56,7 +60,7 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
           <Row k="r" v="reject (prompts for reason)" />
         </Section>
         <Section title="Iteration">
-          <Row k="I" v="open iteration close panel (capital I)" />
+          <Row k="i" v="open iteration close panel" />
         </Section>
         <Section title="Help">
           <Row k="?" v="this overlay" />

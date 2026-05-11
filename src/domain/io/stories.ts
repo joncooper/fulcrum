@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { link, mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import {
   ID_ALLOCATOR_MAX_RETRIES,
   allocateId,
@@ -18,6 +18,27 @@ import {
 import { slugify } from "../slug.ts";
 
 const STORY_FILENAME_RE = /^(T-\d+-[0-9a-f]{4})(?:-.*)?\.md$/;
+
+/**
+ * Build the temp path for an atomic write. Form: `<storiesDir>/.{seq}-tmp-{uuid}`.
+ *
+ * - Leading dot keeps it hidden from `ls` and from chokidar's default scan.
+ * - `{seq}` prefix gives `fulcrum doctor` a hint about which story the temp
+ *   belonged to if cleanup is ever needed.
+ * - `{uuid}` (16 hex chars / 8 bytes) makes collisions vanishingly unlikely
+ *   even under concurrent writes.
+ *
+ * Per design plan: every story write goes through this temp path and then a
+ * single `rename()` (replace) or `link()` (create) — never a direct write to
+ * the final filename.
+ */
+function tmpPathFor(finalPath: string): string {
+  const filename = basename(finalPath);
+  const match = /^T-(\d+)-/.exec(filename);
+  const seq = match ? match[1] : "unknown";
+  const uuid = randomBytes(8).toString("hex");
+  return join(dirname(finalPath), `.${seq}-tmp-${uuid}`);
+}
 
 export type LoadedStory = {
   story: Story;
@@ -36,11 +57,24 @@ export type CreateStoryInput = {
   /** Pre-computed Lexorank rank for this story. */
   position: string;
   labels?: string[];
+  /** Optional epic slug to attach to the story. */
+  epic?: string;
 };
 
 /**
- * Create a new story. Allocates an id, writes the file with `wx` flag (atomic
- * create-if-not-exists), retries with a fresh random suffix on EEXIST.
+ * Create a new story. Per plan, every story write uses temp+rename atomicity:
+ *
+ *   1. Write content to `.fulcrum/stories/.{seq}-tmp-{uuid}` (the temp file).
+ *      The `wx` flag on the temp write fails if the temp filename collides
+ *      with itself (vanishingly unlikely given 64 bits of entropy).
+ *   2. `link(tmp, final)` — POSIX hardlink is atomic and fails with EEXIST
+ *      if `final` already exists. This is how we detect ID collisions across
+ *      concurrent creates (one CLI + one web tab racing to claim the same id).
+ *   3. `unlink(tmp)` — drop the temp link; the final filename remains.
+ *
+ * On EEXIST during `link`, we regenerate the 4-hex random suffix and retry.
+ * Other processes never see a partial file because the final filename only
+ * appears as a complete file (the link points to a fully-written temp).
  */
 export async function createStory(
   input: CreateStoryInput,
@@ -65,6 +99,7 @@ export async function createStory(
       labels: input.labels ?? [],
       icebox: false,
       created: now,
+      ...(input.epic !== undefined ? { epic: input.epic } : {}),
     };
     const validated = StoryFrontmatterSchema.safeParse(fmCandidate);
     if (!validated.success) {
@@ -79,9 +114,26 @@ export async function createStory(
     const path = join(input.storiesDir, filename);
     const body = input.body ?? `# ${input.title}\n`;
     const content = serializeStoryFile(validated.data, body);
+    const tmpPath = tmpPathFor(path);
 
     try {
-      await writeFile(path, content, { flag: "wx", encoding: "utf-8" });
+      await writeFile(tmpPath, content, { flag: "wx", encoding: "utf-8" });
+    } catch (cause) {
+      return err({
+        kind: "IO_ERROR",
+        message: `failed to write temp file ${tmpPath}`,
+        cause,
+      });
+    }
+
+    try {
+      await link(tmpPath, path);
+      // best-effort: drop the temp link now that final exists
+      try {
+        await unlink(tmpPath);
+      } catch {
+        /* doctor will collect leftover temps */
+      }
       const hash = createHash("sha256").update(content).digest("hex");
       return ok({
         story: { frontmatter: validated.data, body },
@@ -89,6 +141,12 @@ export async function createStory(
         hash,
       });
     } catch (cause) {
+      // link failed; clean up temp file
+      try {
+        await unlink(tmpPath);
+      } catch {
+        /* doctor will collect */
+      }
       const code = (cause as NodeJS.ErrnoException).code;
       if (code === "EEXIST") {
         allocated = regenerateSuffix(allocated);
@@ -100,7 +158,7 @@ export async function createStory(
       }
       return err({
         kind: "IO_ERROR",
-        message: `failed to write ${path}`,
+        message: `failed to link ${tmpPath} -> ${path}`,
         cause,
       });
     }
@@ -286,9 +344,9 @@ export async function writeStoryAtomic(opts: {
     opts.story.frontmatter as unknown as Record<string, unknown>,
     opts.story.body,
   );
-  const tmpPath = `${opts.path}.tmp.${randomBytes(4).toString("hex")}`;
+  const tmpPath = tmpPathFor(opts.path);
   try {
-    await writeFile(tmpPath, content, { encoding: "utf-8" });
+    await writeFile(tmpPath, content, { flag: "wx", encoding: "utf-8" });
     await rename(tmpPath, opts.path);
     const hash = createHash("sha256").update(content).digest("hex");
     return ok({ hash });

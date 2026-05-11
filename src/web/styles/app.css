@@ -162,9 +162,11 @@ body {
 .story .title {
   font-size: 13px;
   color: var(--ink-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* DESIGN.md L59-60: 13px Plex Sans, no truncation, multi-line allowed. Most
+     fit one line at typical column width; long titles wrap rather than ellipsis. */
+  overflow: visible;
+  white-space: normal;
+  word-break: break-word;
 }
 .story .pts {
   font-family: var(--font-mono);
@@ -245,6 +247,50 @@ body {
 }
 .status-bar .sep {
   color: var(--ink-muted);
+}
+/* SSE connection indicator pushed to the right of the status bar. Shown only
+   when status !== "connected"; hidden in the healthy default state. */
+.sse-indicator {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sse-indicator .sse-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.sse-connecting .sse-dot {
+  background: #d97706; /* amber */
+}
+.sse-watcher-restarted {
+  color: #b45309;
+}
+.sse-watcher-restarted .sse-dot {
+  background: #d97706; /* amber — same hue as connecting */
+}
+[data-theme="dark"] .sse-watcher-restarted {
+  color: #fbbf24;
+}
+[data-theme="dark"] .sse-watcher-restarted .sse-dot {
+  background: #fbbf24;
+}
+.sse-reconnecting {
+  color: #b91c1c;
+}
+.sse-reconnecting .sse-dot {
+  background: #b91c1c; /* red */
+}
+[data-theme="dark"] .sse-connecting .sse-dot {
+  background: #fbbf24;
+}
+[data-theme="dark"] .sse-reconnecting {
+  color: #fca5a5;
+}
+[data-theme="dark"] .sse-reconnecting .sse-dot {
+  background: #fca5a5;
 }
 
 /* ─── EXPANDED STORY ─── */
@@ -420,6 +466,51 @@ body {
 .empty .prompt {
   color: var(--ink-muted);
 }
+.empty .mono {
+  font-family: var(--font-mono);
+}
+.empty .cmd-emph-feature {
+  color: var(--type-feature);
+}
+.empty .cmd-emph-muted {
+  color: var(--ink-muted);
+}
+.empty-meta {
+  margin-top: 24px;
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.empty-meta strong {
+  color: var(--ink-primary);
+}
+.col-empty-hint {
+  padding: 12px;
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+.empty-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.empty-actions .action-btn {
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 6px 12px;
+  background: var(--ink-primary);
+  color: var(--bg-app);
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.empty-actions .action-btn:disabled {
+  background: var(--ink-muted);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.empty-actions .action-btn:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
 
 /* ─── LOADING ─── */
 .loading,
@@ -462,8 +553,21 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  /* Per DESIGN.md L296-309: respect prefers-reduced-motion. Disable the named
+     400ms iteration-close transition and any other animations. Pill-state
+     fades + state-pill swaps already happen at <=150ms so they're below the
+     reduce threshold; we kill animations entirely as a belt-and-suspenders
+     measure. */
   .board-shell[data-closing="true"] .board {
     animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -476,6 +580,147 @@ body {
   display: flex;
   flex-direction: column;
   outline: none;
+}
+
+/* ─── TOAST HOST (transient notifications, bottom-right) ─── */
+.toast-host {
+  position: fixed;
+  bottom: 32px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+  max-width: 400px;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 2px;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  border: 1px solid;
+}
+.toast-stale-write {
+  background: #fef3c7;
+  border-color: #d97706;
+  color: #78350f;
+}
+[data-theme="dark"] .toast-stale-write {
+  background: #4a2e0a;
+  border-color: #d97706;
+  color: #fde68a;
+}
+.toast-disk-full,
+.toast-error {
+  background: #fee2e2;
+  border-color: #b91c1c;
+  color: #7f1d1d;
+}
+[data-theme="dark"] .toast-disk-full,
+[data-theme="dark"] .toast-error {
+  background: #4c1d1d;
+  border-color: #b91c1c;
+  color: #fca5a5;
+}
+.toast-msg {
+  flex: 1;
+}
+.toast-dismiss {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.7;
+}
+.toast-dismiss:hover {
+  opacity: 1;
+}
+
+/* ─── COLUMN DROP ZONE (wraps each .col for drag-to-empty-column) ─── */
+.col-dropzone {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.col-dropzone .col {
+  flex: 1;
+}
+.col-dropzone.is-over .col {
+  outline: 2px dashed var(--ink-secondary);
+  outline-offset: -2px;
+}
+
+/* ─── MALFORMED-STORY "NEEDS ATTENTION" BANNER ─── */
+.malformed-banner {
+  background: #fde68a;
+  border-bottom: 1px solid var(--rule);
+  color: #1c1917;
+  font-size: 12px;
+  font-family: var(--font-body);
+  flex-shrink: 0;
+}
+[data-theme="dark"] .malformed-banner {
+  background: #4a2e0a;
+  color: #fde68a;
+}
+.malformed-toggle {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 6px 16px;
+  text-align: left;
+  width: 100%;
+}
+.malformed-toggle:hover {
+  text-decoration: underline;
+}
+.malformed-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.malformed-row {
+  display: flex;
+  gap: 12px;
+  padding: 2px 0;
+}
+.malformed-path {
+  color: var(--ink-secondary);
+  flex-shrink: 0;
+}
+.malformed-error {
+  color: inherit;
+}
+
+/* ─── MOBILE READ-ONLY BANNER (<768px) ─── */
+.mobile-readonly-banner {
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-family: var(--font-body);
+  padding: 6px 16px;
+  flex-shrink: 0;
+}
+
+/* When the board is read-only, drag affordances are not exposed and edit/
+   create surfaces never render. The CSS just dampens hover states a touch
+   to signal "tap-to-expand is the only interaction." */
+.board-shell[data-readonly="true"] .story-row {
+  cursor: default;
 }
 
 /* ─── SEARCH BAR ─── */

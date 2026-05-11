@@ -33,6 +33,78 @@ const AUTO_CHAIN_TARGET = {
 const REJECTABLE: ReadonlySet<StoryState> = new Set(["started", "finished", "delivered"]);
 
 /**
+ * Explicit transition table. Each cell is either the resulting state or
+ * `"INVALID_TRANSITION"`. The implementation in `transition()` is the source
+ * of truth; this table is a static doc-comment-shaped representation that
+ * exercises the same logic for tests and review.
+ *
+ *                   start       finish      deliver     accept       reject       restart
+ *   unstarted   →   started     finished    delivered   INVALID      INVALID      INVALID
+ *   started     →   INVALID     finished    delivered   INVALID      rejected     INVALID
+ *   finished    →   INVALID     INVALID     delivered   INVALID      rejected     INVALID
+ *   delivered   →   INVALID     INVALID     INVALID     accepted     rejected     INVALID
+ *   accepted    →   INVALID     INVALID     INVALID     INVALID      INVALID      INVALID
+ *   rejected    →   INVALID     INVALID     INVALID     INVALID      INVALID      started
+ *
+ * Valid transitions: 11 of 36 cells. Forward-only auto-chain (`finish` on
+ * `unstarted` jumps to `finished`; `deliver` on `unstarted` jumps to
+ * `delivered`); backward transitions are rejected; only `rejected` can
+ * `restart` back to `started`.
+ */
+export const TRANSITION_TABLE: Readonly<
+  Record<StoryState, Readonly<Record<Command["kind"], StoryState | "INVALID_TRANSITION">>>
+> = {
+  unstarted: {
+    start: "started",
+    finish: "finished",
+    deliver: "delivered",
+    accept: "INVALID_TRANSITION",
+    reject: "INVALID_TRANSITION",
+    restart: "INVALID_TRANSITION",
+  },
+  started: {
+    start: "INVALID_TRANSITION",
+    finish: "finished",
+    deliver: "delivered",
+    accept: "INVALID_TRANSITION",
+    reject: "rejected",
+    restart: "INVALID_TRANSITION",
+  },
+  finished: {
+    start: "INVALID_TRANSITION",
+    finish: "INVALID_TRANSITION",
+    deliver: "delivered",
+    accept: "INVALID_TRANSITION",
+    reject: "rejected",
+    restart: "INVALID_TRANSITION",
+  },
+  delivered: {
+    start: "INVALID_TRANSITION",
+    finish: "INVALID_TRANSITION",
+    deliver: "INVALID_TRANSITION",
+    accept: "accepted",
+    reject: "rejected",
+    restart: "INVALID_TRANSITION",
+  },
+  accepted: {
+    start: "INVALID_TRANSITION",
+    finish: "INVALID_TRANSITION",
+    deliver: "INVALID_TRANSITION",
+    accept: "INVALID_TRANSITION",
+    reject: "INVALID_TRANSITION",
+    restart: "INVALID_TRANSITION",
+  },
+  rejected: {
+    start: "INVALID_TRANSITION",
+    finish: "INVALID_TRANSITION",
+    deliver: "INVALID_TRANSITION",
+    accept: "INVALID_TRANSITION",
+    reject: "INVALID_TRANSITION",
+    restart: "started",
+  },
+};
+
+/**
  * Apply a command to a story. Returns a new frontmatter with the resulting
  * state, or an INVALID_TRANSITION error.
  *

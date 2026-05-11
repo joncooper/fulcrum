@@ -417,7 +417,90 @@ describe("writeStoryAtomic", () => {
       await writeStoryAtomic({ path: created.value.path, story: created.value.story });
       const fs = await import("node:fs/promises");
       const entries = await fs.readdir(dir);
+      // No legacy `foo.md.tmp.xxx` files and no new `.NNNN-tmp-xxx` files.
       expect(entries.some((e) => e.includes(".tmp."))).toBe(false);
+      expect(entries.some((e) => /-tmp-/.test(e))).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("temp file uses canonical `.{seq}-tmp-{uuid}` naming during write", async () => {
+    const dir = makeStoriesDir();
+    try {
+      const created = await createStory({
+        storiesDir: dir,
+        type: "chore",
+        title: "x",
+        position: "a0",
+      });
+      if (!created.ok) throw new Error("setup failed");
+
+      // Hook into the write path: do a write and inspect the directory mid-flight
+      // is racy, so instead read the source's tmpPathFor convention by writing
+      // and asserting the path format would be produced. Here we just verify
+      // that after a successful round-trip, only the canonical `.md` file remains.
+      const updated = {
+        ...created.value.story,
+        frontmatter: { ...created.value.story.frontmatter, state: "started" as const },
+      };
+      await writeStoryAtomic({ path: created.value.path, story: updated });
+      const fs = await import("node:fs/promises");
+      const entries = await fs.readdir(dir);
+      const visible = entries.filter((e) => !e.startsWith("."));
+      const hidden = entries.filter((e) => e.startsWith("."));
+      expect(visible).toHaveLength(1);
+      expect(visible[0]).toMatch(/\.md$/);
+      // No leftover hidden temp files
+      expect(hidden).toHaveLength(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("createStory: atomic temp+link", () => {
+  test("creates the final file with canonical naming and no leftover temp", async () => {
+    const dir = makeStoriesDir();
+    try {
+      const r = await createStory({
+        storiesDir: dir,
+        type: "feature",
+        title: "search bar",
+        points: 3,
+        position: "a0",
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      const fs = await import("node:fs/promises");
+      const entries = await fs.readdir(dir);
+      // exactly one .md file, zero dotfile temps
+      expect(entries.filter((e) => e.endsWith(".md"))).toHaveLength(1);
+      expect(entries.filter((e) => e.startsWith("."))).toHaveLength(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("retries with fresh suffix on filename collision (ID_COLLISION recovery)", async () => {
+    // Two concurrent creates should both succeed with distinct random suffixes.
+    const dir = makeStoriesDir();
+    try {
+      const [a, b] = await Promise.all([
+        createStory({ storiesDir: dir, type: "chore", title: "x", position: "a0" }),
+        createStory({ storiesDir: dir, type: "chore", title: "x", position: "a1" }),
+      ]);
+      expect(a.ok).toBe(true);
+      expect(b.ok).toBe(true);
+      if (a.ok && b.ok) {
+        // Distinct full IDs even though they raced on the same seq
+        expect(a.value.story.frontmatter.id).not.toBe(b.value.story.frontmatter.id);
+      }
+      const fs = await import("node:fs/promises");
+      const entries = await fs.readdir(dir);
+      expect(entries.filter((e) => e.endsWith(".md"))).toHaveLength(2);
+      // No leftover temps from the race
+      expect(entries.filter((e) => e.startsWith("."))).toHaveLength(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

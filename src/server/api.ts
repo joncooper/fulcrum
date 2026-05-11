@@ -1,4 +1,9 @@
-import { loadProject, writeProjectAtomic, type ProjectRoot } from "../domain/io/project.ts";
+import {
+  loadProject,
+  loadProjectWithHash,
+  writeProjectAtomic,
+  type ProjectRoot,
+} from "../domain/io/project.ts";
 import {
   createStory,
   deleteStory,
@@ -10,7 +15,11 @@ import {
 import { closeIteration } from "../domain/iteration-close.ts";
 import { replaceTitleInBody, titleFromBody } from "../domain/markdown.ts";
 import { between } from "../domain/position.ts";
-import { StoryFrontmatterSchema, idMatches } from "../domain/schemas/story.ts";
+import {
+  StoryFrontmatterSchema,
+  idMatches,
+  validatePointsAgainstScale,
+} from "../domain/schemas/story.ts";
 import { transition, type Command } from "../domain/state-machine.ts";
 import type { SseHub } from "./sse.ts";
 import type { FileWatcher } from "./file-watcher.ts";
@@ -114,7 +123,13 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
 
   // Write routes
   if (method === "POST" && pathname === "/api/stories") {
-    let body: { type?: string; title?: string; points?: number; body?: string };
+    let body: {
+      type?: string;
+      title?: string;
+      points?: number;
+      body?: string;
+      epic?: string;
+    };
     try {
       body = (await req.json()) as typeof body;
     } catch {
@@ -127,6 +142,25 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
     const title = (body.title ?? "").trim();
     if (title.length === 0) {
       return json({ error: { kind: "INVALID_FRONTMATTER", message: "title required" } }, 400);
+    }
+    if (body.epic !== undefined && (typeof body.epic !== "string" || body.epic.trim().length === 0)) {
+      return json({ error: { kind: "INVALID_FRONTMATTER", message: "epic must be a non-empty string" } }, 400);
+    }
+
+    // Validate points against this project's estimate_scale before create.
+    // The structural schema only checks it's a non-negative int; the project
+    // owns which specific values are legal (defaults to Fibonacci-ish).
+    if (body.points !== undefined) {
+      const projForScale = loadProject(project);
+      if (projForScale.ok) {
+        const scaleErr = validatePointsAgainstScale(
+          body.points,
+          projForScale.value.settings.estimate_scale,
+        );
+        if (scaleErr !== null) {
+          return json({ error: { kind: "INVALID_FRONTMATTER", message: scaleErr } }, 400);
+        }
+      }
     }
 
     const list = await listStories(project.storiesDir);
@@ -144,6 +178,7 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
       points: body.points,
       position,
       body: body.body,
+      epic: body.epic?.trim(),
     });
     if (!result.ok) return json({ error: result.error }, 400);
 
@@ -247,6 +282,20 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
     }
     if (reqBody.type !== undefined && reqBody.type !== "feature" && reqBody.type !== "bug" && reqBody.type !== "chore" && reqBody.type !== "release") {
       return json({ error: { kind: "INVALID_FRONTMATTER", message: "type must be feature/bug/chore/release" } }, 400);
+    }
+    // Validate points against project's estimate_scale when a numeric points
+    // value is being set.
+    if (typeof reqBody.points === "number") {
+      const projForScale = loadProject(project);
+      if (projForScale.ok) {
+        const scaleErr = validatePointsAgainstScale(
+          reqBody.points,
+          projForScale.value.settings.estimate_scale,
+        );
+        if (scaleErr !== null) {
+          return json({ error: { kind: "INVALID_FRONTMATTER", message: scaleErr } }, 400);
+        }
+      }
     }
 
     const path = await findStoryPath({ storiesDir: project.storiesDir, query: idQuery });
@@ -448,8 +497,10 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
       );
     }
 
-    const projResult = loadProject(project);
+    const projResult = loadProjectWithHash(project);
     if (!projResult.ok) return json({ error: projResult.error }, 500);
+    const projectHash = projResult.value.hash;
+    const closingProject = projResult.value.project;
 
     const list = await listStories(project.storiesDir);
     if (!list.ok) return json({ error: list.error }, 500);
@@ -488,7 +539,7 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
     }
 
     const closeResult = closeIteration({
-      project: projResult.value,
+      project: closingProject,
       stories: list.value.stories.map((s) => s.story),
       acceptedIds: resolvedIds,
     });
@@ -530,12 +581,19 @@ export async function handleApi(req: Request, ctx: ApiContext): Promise<Response
       writtenIds.push(updated.frontmatter.id);
     }
 
-    // Persist the new project.yml (bumped iteration + recomputed velocity).
-    const projWritten = await writeProjectAtomic(project, closeResult.value.project);
-    if (!projWritten.ok) return json({ error: projWritten.error }, 500);
+    // Persist the new project.yml with CAS-on-hash. If another process wrote
+    // project.yml between our load and now, surface STALE_WRITE so the caller
+    // can retry on fresh state.
+    const projWritten = await writeProjectAtomic(project, closeResult.value.project, {
+      expectedHash: projectHash,
+    });
+    if (!projWritten.ok) {
+      const status = projWritten.error.kind === "STALE_WRITE" ? 409 : 500;
+      return json({ error: projWritten.error }, status);
+    }
     if (watcher) watcher.markSelfWrite(project.projectFile);
 
-    const closingIteration = projResult.value.current_iteration;
+    const closingIteration = closingProject.current_iteration;
     hub.broadcast({
       type: "iteration-closed",
       data: {

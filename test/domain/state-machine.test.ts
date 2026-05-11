@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { transition, type Command } from "../../src/domain/state-machine.ts";
+import {
+  TRANSITION_TABLE,
+  transition,
+  type Command,
+} from "../../src/domain/state-machine.ts";
 import type { StoryFrontmatter, StoryState } from "../../src/domain/schemas/story.ts";
 
 const baseStory = (state: StoryState, extras: Partial<StoryFrontmatter> = {}): StoryFrontmatter =>
@@ -185,6 +189,84 @@ describe("transition: restart", () => {
       const r = transition(baseStory(state), { kind: "restart" });
       expect(r.ok).toBe(false);
     }
+  });
+});
+
+describe("TRANSITION_TABLE: all 36 cells (6 states × 6 commands)", () => {
+  const STATES: StoryState[] = [
+    "unstarted",
+    "started",
+    "finished",
+    "delivered",
+    "accepted",
+    "rejected",
+  ];
+  const COMMANDS: Command["kind"][] = [
+    "start",
+    "finish",
+    "deliver",
+    "accept",
+    "reject",
+    "restart",
+  ];
+
+  // Build a story that's valid in the given state. Accepted/rejected need
+  // their extra fields to satisfy schema refinements when needed (but the
+  // transition function only reads state, so a minimal story works).
+  const storyAt = (s: StoryState): StoryFrontmatter => {
+    if (s === "rejected") {
+      return {
+        id: "T-1001-aaaa",
+        type: "feature",
+        state: s,
+        points: 3,
+        position: "a0",
+        labels: [],
+        icebox: false,
+        created: "2026-05-08",
+        reject_reason: "scope",
+      };
+    }
+    return {
+      id: "T-1001-aaaa",
+      type: "feature",
+      state: s,
+      points: 3,
+      position: "a0",
+      labels: [],
+      icebox: false,
+      created: "2026-05-08",
+      ...(s === "accepted" ? { accepted_at: "2026-05-08T10:00:00.000Z" } : {}),
+    };
+  };
+
+  const cmdFor = (kind: Command["kind"]): Command =>
+    kind === "reject" ? { kind: "reject", reason: "test" } : ({ kind } as Command);
+
+  for (const state of STATES) {
+    for (const kind of COMMANDS) {
+      const expected = TRANSITION_TABLE[state][kind];
+      test(`${state} + ${kind} → ${expected}`, () => {
+        const r = transition(storyAt(state), cmdFor(kind));
+        if (expected === "INVALID_TRANSITION") {
+          expect(r.ok).toBe(false);
+          if (!r.ok) expect(r.error.kind).toBe("INVALID_TRANSITION");
+        } else {
+          expect(r.ok).toBe(true);
+          if (r.ok) expect(r.value.state).toBe(expected);
+        }
+      });
+    }
+  }
+
+  test("table reports exactly 11 valid transitions", () => {
+    let validCount = 0;
+    for (const state of STATES) {
+      for (const kind of COMMANDS) {
+        if (TRANSITION_TABLE[state][kind] !== "INVALID_TRANSITION") validCount++;
+      }
+    }
+    expect(validCount).toBe(11);
   });
 });
 

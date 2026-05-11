@@ -3,6 +3,7 @@ import {
   StoryFrontmatterSchema,
   idMatches,
   shortId,
+  validatePointsAgainstScale,
   type StoryFrontmatter,
 } from "../../src/domain/schemas/story.ts";
 
@@ -100,12 +101,27 @@ describe("StoryFrontmatterSchema — refinements", () => {
     }
   });
 
-  test("non-Fibonacci points (4) is rejected for feature", () => {
-    const result = StoryFrontmatterSchema.safeParse({
-      ...baseStory,
-      points: 4,
-    });
-    expect(result.success).toBe(false);
+  test("non-feature stories cannot carry points (bug/chore/release are non-estimable)", () => {
+    for (const t of ["bug", "chore", "release"] as const) {
+      const result = StoryFrontmatterSchema.safeParse({
+        ...baseStory,
+        type: t,
+        points: 3,
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some((i) => i.path.includes("points"))).toBe(true);
+      }
+    }
+  });
+
+  test("schema accepts any non-negative integer for points (scale is project-driven)", () => {
+    // Structural validation: any non-negative int. The "must be in estimate_scale"
+    // check is enforced at the write boundary via validatePointsAgainstScale.
+    for (const pts of [0, 1, 2, 3, 4, 5, 7, 8, 100]) {
+      const result = StoryFrontmatterSchema.safeParse({ ...baseStory, points: pts });
+      expect(result.success).toBe(true);
+    }
   });
 
   test("Fibonacci points {0,1,2,3,5,8} all accepted for feature", () => {
@@ -113,6 +129,27 @@ describe("StoryFrontmatterSchema — refinements", () => {
       const result = StoryFrontmatterSchema.safeParse({ ...baseStory, points: pts });
       expect(result.success).toBe(true);
     }
+  });
+
+  test("validatePointsAgainstScale: undefined points → no error", () => {
+    expect(validatePointsAgainstScale(undefined, [0, 1, 2, 3, 5, 8])).toBe(null);
+  });
+
+  test("validatePointsAgainstScale: in-scale value → no error", () => {
+    expect(validatePointsAgainstScale(3, [0, 1, 2, 3, 5, 8])).toBe(null);
+  });
+
+  test("validatePointsAgainstScale: off-scale value → error", () => {
+    const err = validatePointsAgainstScale(4, [0, 1, 2, 3, 5, 8]);
+    expect(err).not.toBe(null);
+    expect(err).toContain("0, 1, 2, 3, 5, 8");
+  });
+
+  test("validatePointsAgainstScale: respects custom scale", () => {
+    // Project chose a different scale; 4 is now legal.
+    expect(validatePointsAgainstScale(4, [0, 1, 2, 4, 8])).toBe(null);
+    // But 5 is not.
+    expect(validatePointsAgainstScale(5, [0, 1, 2, 4, 8])).not.toBe(null);
   });
 
   test("icebox=true on accepted is rejected", () => {

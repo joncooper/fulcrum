@@ -1,10 +1,11 @@
 ---
+accepted_at: 2026-05-11T20:11:01.676Z
 created: 2026-05-08
 icebox: false
 id: T-1030-ecba
 labels: []
 position: aT
-state: unstarted
+state: accepted
 type: chore
 ---
 

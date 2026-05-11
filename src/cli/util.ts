@@ -45,11 +45,23 @@ export function parseArgs(args: string[]): ParsedArgs {
   return { positional, flags };
 }
 
-export function failNoProject(): number {
-  process.stderr.write(
-    "fulcrum: not in a fulcrum project (no .fulcrum/project.yml in cwd or parents)\n" +
-      "         run `fulcrum init` to create one\n",
-  );
+export function failNoProject(json = false): number {
+  if (json) {
+    process.stderr.write(
+      JSON.stringify({
+        ok: false,
+        error: {
+          kind: "NOT_FOUND",
+          message: "not in a fulcrum project (no .fulcrum/project.yml in cwd or parents); run `fulcrum init`",
+        },
+      }) + "\n",
+    );
+  } else {
+    process.stderr.write(
+      "fulcrum: not in a fulcrum project (no .fulcrum/project.yml in cwd or parents)\n" +
+        "         run `fulcrum init` to create one\n",
+    );
+  }
   return 1;
 }
 

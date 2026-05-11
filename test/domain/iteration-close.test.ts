@@ -43,8 +43,8 @@ function makeStory(
   return { frontmatter: fm, body: `# Story ${seq}\n` };
 }
 
-describe("closeIteration: happy path", () => {
-  test("transitions delivered → accepted, stamps accepted_at, advances project", () => {
+describe("closeIteration: stamps iteration:N (canonical projection model)", () => {
+  test("transitions delivered → accepted, stamps accepted_at AND iteration:N", () => {
     const a = makeStory("delivered", { points: 3 });
     const b = makeStory("delivered", { points: 5 });
     const r = closeIteration({
@@ -57,9 +57,9 @@ describe("closeIteration: happy path", () => {
     expect(r.value.changed).toHaveLength(2);
     for (const s of r.value.changed) {
       expect(s.frontmatter.state).toBe("accepted");
-      expect(s.frontmatter.accepted_at).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO
-      // No `iteration` field on the story — iteration is derived.
-      expect((s.frontmatter as { iteration?: unknown }).iteration).toBeUndefined();
+      expect(s.frontmatter.accepted_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      // iteration:N is stamped at close (immutable from here forward).
+      expect(s.frontmatter.iteration).toBe(7);
     }
     expect(r.value.project.current_iteration).toBe(8);
     expect(r.value.velocity_actual).toBe(8);
@@ -82,7 +82,7 @@ describe("closeIteration: happy path", () => {
     expect(rec.velocity).toBe(5);
   });
 
-  test("ad-hoc accepted story (state=accepted, accepted_at in window) counts toward velocity", () => {
+  test("ad-hoc accepted story (state=accepted, accepted_at in window) is stamped at close", () => {
     // Chore was accepted ad-hoc earlier in the iteration (e.g. via `fulcrum accept`).
     const chore = makeStory("accepted", {
       type: "chore",
@@ -98,14 +98,17 @@ describe("closeIteration: happy path", () => {
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
+    // Both stories changed (both got stamped with iteration:2).
+    expect(r.value.changed).toHaveLength(2);
+    const stampedChore = r.value.changed.find((s) => s.frontmatter.id === chore.frontmatter.id);
+    const stampedFeat = r.value.changed.find((s) => s.frontmatter.id === feat.frontmatter.id);
+    expect(stampedChore?.frontmatter.iteration).toBe(2);
+    expect(stampedFeat?.frontmatter.iteration).toBe(2);
     // velocity_actual = chore (0 pts) + feat (8 pts) = 8.
     expect(r.value.velocity_actual).toBe(8);
-    // Only the feat is in `changed` — the chore was already accepted.
-    expect(r.value.changed).toHaveLength(1);
-    expect(r.value.changed[0]!.frontmatter.id).toBe(feat.frontmatter.id);
   });
 
-  test("accepted_at outside current window is NOT counted (prior iteration)", () => {
+  test("accepted_at outside current window is NOT stamped (prior iteration)", () => {
     const old = makeStory("accepted", {
       points: 5,
       accepted_at: "2026-04-15T10:00:00.000Z", // before window 2026-05-01
@@ -117,6 +120,27 @@ describe("closeIteration: happy path", () => {
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
+    // Story not in changed (no stamp) and not in velocity_actual.
+    expect(r.value.changed).toHaveLength(0);
+    expect(r.value.velocity_actual).toBe(0);
+  });
+
+  test("already-stamped story is never re-stamped (immutable)", () => {
+    const old = makeStory("accepted", {
+      points: 5,
+      accepted_at: "2026-05-03T10:00:00.000Z",
+      iteration: 1, // already stamped in a prior close
+    });
+    const r = closeIteration({
+      project: project(2, 0, [], "2026-05-01"),
+      stories: [old],
+      acceptedIds: [],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    // Iteration field already set → not touched, not in changed.
+    expect(r.value.changed).toHaveLength(0);
+    // Velocity_actual = 0 because no stories were stamped with iteration:2.
     expect(r.value.velocity_actual).toBe(0);
   });
 
@@ -204,6 +228,22 @@ describe("closeIteration: spilled", () => {
     if (!r.ok) return;
     expect(r.value.spilled).toHaveLength(0);
   });
+
+  test("stamped (iteration:N set) stories are NOT spilled", () => {
+    const done = makeStory("accepted", {
+      points: 3,
+      accepted_at: "2026-04-10T10:00:00.000Z",
+      iteration: 1,
+    });
+    const r = closeIteration({
+      project: project(2),
+      stories: [done],
+      acceptedIds: [],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.value.spilled).toHaveLength(0);
+  });
 });
 
 describe("closeIteration: zero accepted", () => {
@@ -248,7 +288,7 @@ describe("closeIteration: errors", () => {
     expect(r.error.kind).toBe("INVALID_TRANSITION");
   });
 
-  test("accepting an already-accepted story is a no-op (no error)", () => {
+  test("accepting an already-accepted (state=accepted, no iteration) story stamps it", () => {
     const already = makeStory("accepted", {
       points: 3,
       accepted_at: "2026-05-03T10:00:00.000Z",
@@ -260,8 +300,10 @@ describe("closeIteration: errors", () => {
     });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.value.changed).toHaveLength(0);
-    // It still counts toward velocity_actual since accepted_at is in window.
+    // No state transition (already accepted), but iteration stamp happens.
+    expect(r.value.changed).toHaveLength(1);
+    expect(r.value.changed[0]!.frontmatter.iteration).toBe(2);
+    // It counts toward velocity_actual.
     expect(r.value.velocity_actual).toBe(3);
   });
 });
@@ -311,12 +353,17 @@ describe("rollingVelocityFromHistory", () => {
 });
 
 describe("deliverableStoriesForClose", () => {
-  test("returns only delivered, non-iceboxed stories", () => {
+  test("returns only delivered, non-iceboxed, non-stamped stories", () => {
     const delivered = makeStory("delivered", { points: 3 });
     const started = makeStory("started", { points: 3 });
     const ice = makeStory("delivered", { icebox: true, points: 3 });
     const acc = makeStory("accepted", { accepted_at: "2026-04-01T10:00:00.000Z" });
-    const result = deliverableStoriesForClose([delivered, started, ice, acc]);
+    const stampedDone = makeStory("accepted", {
+      points: 3,
+      accepted_at: "2026-04-15T10:00:00.000Z",
+      iteration: 1,
+    });
+    const result = deliverableStoriesForClose([delivered, started, ice, acc, stampedDone]);
     expect(result.map((s) => s.frontmatter.id)).toEqual([delivered.frontmatter.id]);
   });
 });

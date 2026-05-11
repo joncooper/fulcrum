@@ -1,7 +1,9 @@
+import { loadProject } from "../../domain/io/project.ts";
 import { findStoryPath, readStoryFile, writeStoryAtomic } from "../../domain/io/stories.ts";
 import { replaceTitleInBody, titleFromBody } from "../../domain/markdown.ts";
 import {
   StoryFrontmatterSchema,
+  validatePointsAgainstScale,
   type StoryFrontmatter,
   type StoryType,
 } from "../../domain/schemas/story.ts";
@@ -66,6 +68,18 @@ export async function runEdit(args: string[]): Promise<number> {
       if (!Number.isFinite(n)) {
         process.stderr.write("fulcrum edit: --points must be a number or '-' to clear\n");
         return 1;
+      }
+      // Validate against project's estimate_scale.
+      const projResult = loadProject(proj);
+      if (projResult.ok) {
+        const scaleErr = validatePointsAgainstScale(
+          n,
+          projResult.value.settings.estimate_scale,
+        );
+        if (scaleErr !== null) {
+          emitError("fulcrum edit", { kind: "INVALID_FRONTMATTER", message: scaleErr }, json);
+          return 1;
+        }
       }
       nextFm.points = n;
     }

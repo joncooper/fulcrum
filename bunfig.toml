@@ -1,0 +1,4 @@
+[test]
+# Limit `bun test` to the `test/` directory. Playwright owns `e2e/` and its
+# *.spec.ts files (Playwright's test() is incompatible with bun's runner).
+root = "test"

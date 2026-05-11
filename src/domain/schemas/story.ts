@@ -25,14 +25,31 @@ export const StoryStateSchema = z.enum([
 ]);
 export type StoryState = z.infer<typeof StoryStateSchema>;
 
-/** Points must be in the Fibonacci-ish scale {0, 1, 2, 3, 5, 8} per plan. */
-export const FibPointsSchema = z
-  .number()
-  .int()
-  .nonnegative()
-  .refine((n) => [0, 1, 2, 3, 5, 8].includes(n), {
-    message: "points must be one of {0, 1, 2, 3, 5, 8}",
-  });
+/**
+ * Schema-level points validation: structurally a non-negative integer. The
+ * business rule "points must be in this project's estimate_scale" is enforced
+ * at the write boundary (createStory, patch endpoint, CLI new/edit) where
+ * the project's `settings.estimate_scale` is available. Splitting it this way
+ * keeps the schema project-agnostic and lets different projects customize
+ * their scale via project.yml.
+ */
+export const FibPointsSchema = z.number().int().nonnegative();
+
+/**
+ * Project-level business rule: points must be one of the values listed in the
+ * project's `settings.estimate_scale`. Returns an Error message on failure,
+ * or null on success.
+ */
+export function validatePointsAgainstScale(
+  points: number | undefined,
+  scale: readonly number[],
+): string | null {
+  if (points === undefined) return null;
+  if (!scale.includes(points)) {
+    return `points must be one of {${scale.join(", ")}}`;
+  }
+  return null;
+}
 
 const TERMINAL_STATES = new Set<StoryState>(["accepted", "rejected"]);
 
@@ -53,12 +70,18 @@ export const StoryFrontmatterSchema = z
     icebox: z.boolean().default(false),
     /**
      * ISO 8601 timestamp when the story transitioned to `accepted`. Set by the
-     * accept transition, never edited directly. The story's iteration is
-     * derived: an iteration window [start, end) "contains" this story iff
-     * `start <= accepted_at < end`. There is no `iteration: N` field; stories
-     * don't know their iteration, iterations know their stories (by time).
+     * accept transition, never edited directly. Informational — used for the
+     * close ritual to decide which iteration to stamp this story with.
      */
     accepted_at: z.string().datetime({ offset: true }).optional(),
+    /**
+     * Iteration number stamped onto the story by the close ritual. Once set,
+     * IMMUTABLE — the story is now historical, attributed to a closed
+     * iteration. Stories without this field are "in flight" (or accepted but
+     * not yet closed). Projection: stories with `iteration:N` move to Done;
+     * stories without are in current/backlog/icebox.
+     */
+    iteration: z.number().int().positive().optional(),
     /** ISO date string (YYYY-MM-DD or full ISO timestamp). */
     created: z.string().min(1),
     /** Required when state=rejected, otherwise omitted. */
@@ -75,6 +98,13 @@ export const StoryFrontmatterSchema = z
     (s) => s.type !== "feature" || (s.points !== undefined),
     {
       message: "feature stories require `points`",
+      path: ["points"],
+    },
+  )
+  .refine(
+    (s) => s.type === "feature" || s.points === undefined,
+    {
+      message: "only feature stories carry `points` (bug/chore/release are non-estimable)",
       path: ["points"],
     },
   )

@@ -1,60 +1,88 @@
 import type { ProjectDto, StoryDto } from "./api.ts";
 
-export type Column = "current" | "backlog" | "icebox";
+export type Column = "current" | "backlog" | "icebox" | "done";
 
 export type ColumnMap = Record<Column, StoryDto[]>;
 
 /**
- * Column derivation — time-window model.
+ * Column derivation — velocity+position projection (canonical model).
  *
- *   - `icebox`  = stories with `icebox: true`
- *   - `current` = in-flight (started/finished/delivered) PLUS stories that
- *                 were accepted within the current iteration window
- *                 (`accepted_at >= project.iteration_start_date`). Accepted
- *                 stories carry a visual distinction in the row but live in
- *                 Current alongside the in-flight work — vintage PT idiom.
- *   - `backlog` = unstarted, plus rejected (re-bound for restart) — and any
- *                 stories accepted in a *prior* iteration window are NOT
- *                 shown on the active board (they belong to history).
+ *   - `done`    = stories with `iteration: N` field set (terminal: accepted in
+ *                 a closed iteration). Removed from active projection.
+ *   - `icebox`  = stories with `icebox: true` AND no `iteration` field.
+ *   - `current` = projection chunk 0 — the first slice of the
+ *                 non-done/non-icebox stream sorted by Lexorank `position`,
+ *                 sliced into chunks summing to `project.velocity` points.
+ *   - `backlog` = projection chunks 1+ — everything after the current slice.
  *
- * There is no `iteration` field on stories. An iteration is a time window
- * `[iteration_start_date, end)`; a story is "in" iteration N iff its
- * `accepted_at` falls in that window.
+ * Behavior the user feels: change `project.velocity` and stories re-flow
+ * live between current and backlog with no file rewrites. This is PT's
+ * "what fits in the next iteration?" rendered as a projection.
  *
- * Within each column, stories are ordered by Lexorank `position`.
+ * Accepted-not-yet-closed stories (state="accepted", no iteration) sit in
+ * the projection at their position but contribute 0 points to chunk
+ * capacity — they're "done as far as the user is concerned" but waiting
+ * on close to be stamped. They show with the accepted row tint per T-1034.
+ *
+ * Edge cases:
+ *   - velocity = 0 → no chunking happens; everything goes into current.
+ *     (Rationale: a fresh project hasn't computed velocity yet; better to
+ *     show all candidate stories than hide them.)
+ *   - story with no points (chore/bug/release) contributes 0 to the chunk
+ *     sum and flows through; it lands in whichever chunk its position
+ *     places it in.
  */
 export function deriveColumns(stories: StoryDto[], project: ProjectDto): ColumnMap {
-  const current: StoryDto[] = [];
-  const backlog: StoryDto[] = [];
+  const done: StoryDto[] = [];
   const icebox: StoryDto[] = [];
-  const windowStart = project.iteration_start_date;
+  const active: StoryDto[] = [];
 
   for (const s of stories) {
+    if (s.iteration !== undefined) {
+      done.push(s);
+      continue;
+    }
     if (s.icebox) {
       icebox.push(s);
       continue;
     }
-    if (s.state === "accepted") {
-      // Belongs to the current iteration window? Show in Current.
-      // Belongs to a prior window? Hidden from active board (would be a
-      // historical iteration view in M2).
-      if (s.accepted_at !== undefined && s.accepted_at.slice(0, 10) >= windowStart) {
-        current.push(s);
-      }
-      continue;
-    }
-    if (s.state === "started" || s.state === "finished" || s.state === "delivered") {
-      current.push(s);
-      continue;
-    }
-    // unstarted, rejected → backlog
-    backlog.push(s);
+    active.push(s);
   }
 
   const byPosition = (a: StoryDto, b: StoryDto) => (a.position < b.position ? -1 : 1);
-  current.sort(byPosition);
-  backlog.sort(byPosition);
+  active.sort(byPosition);
   icebox.sort(byPosition);
+  done.sort(byPosition);
 
-  return { current, backlog, icebox };
+  const velocity = project.velocity;
+  const current: StoryDto[] = [];
+  const backlog: StoryDto[] = [];
+
+  if (velocity <= 0) {
+    // No projection yet — everything in current.
+    current.push(...active);
+  } else {
+    // Slice into chunks of `velocity` points. Accepted-not-closed stories
+    // contribute 0 points (they're effectively done, waiting on close).
+    let runningSum = 0;
+    let pastCurrent = false;
+    for (const s of active) {
+      const pts = s.state === "accepted" ? 0 : s.points ?? 0;
+      // First chunk: keep adding until adding this story would exceed velocity.
+      // We use "would exceed" so that capacity overflow is allowed by one story
+      // (matches PT's "what fits in the iteration?" semantics — the iteration
+      // budget is a target, not a hard cap).
+      if (!pastCurrent && runningSum + pts > velocity && current.length > 0) {
+        pastCurrent = true;
+      }
+      if (pastCurrent) {
+        backlog.push(s);
+      } else {
+        current.push(s);
+        runningSum += pts;
+      }
+    }
+  }
+
+  return { current, backlog, icebox, done };
 }

@@ -203,21 +203,32 @@ describe("API: PATCH /api/stories/:id (position)", () => {
     expect(body.story.body.split("\n")[0]).toBe("# renamed first story");
   });
 
-  test("updates points + type together", async () => {
+  test("updates points + type together (feature-only — non-feature types cannot carry points)", async () => {
     const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
       stories: { id: string }[];
     };
     const target = list.stories[0]!;
 
-    const res = await fetch(`${server.url}/api/stories/${target.id}`, {
+    // Setting points + bug is invalid (bugs are non-estimable per plan).
+    const bad = await fetch(`${server.url}/api/stories/${target.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ points: 8, type: "bug" }),
     });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: true; story: { points: number; type: string } };
-    expect(body.story.points).toBe(8);
-    expect(body.story.type).toBe("bug");
+    expect(bad.status).toBe(400);
+    const badBody = (await bad.json()) as { error: { kind: string; message: string } };
+    expect(badBody.error.kind).toBe("INVALID_FRONTMATTER");
+
+    // Feature with points works.
+    const ok = await fetch(`${server.url}/api/stories/${target.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ points: 8, type: "feature" }),
+    });
+    expect(ok.status).toBe(200);
+    const okBody = (await ok.json()) as { ok: true; story: { points: number; type: string } };
+    expect(okBody.story.points).toBe(8);
+    expect(okBody.story.type).toBe("feature");
   });
 
   test("rejects invalid points (off-scale) via schema validation", async () => {
@@ -473,6 +484,63 @@ describe("API: POST /api/iteration/close", () => {
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("API: POST /api/stories/:id/transitions/:verb — CAS-on-hash", () => {
+  test("happy path: transition succeeds when expectedHash matches", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string; state: string; hash: string }[];
+    };
+    const target = list.stories.find((s) => s.state === "unstarted")!;
+    expect(target).toBeDefined();
+    const res = await fetch(`${server.url}/api/stories/${target.id}/transitions/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expectedHash: target.hash }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; story: { state: string } };
+    expect(body.ok).toBe(true);
+    expect(body.story.state).toBe("started");
+  });
+
+  test("STALE_WRITE: transition fails when expectedHash doesn't match", async () => {
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string; state: string }[];
+    };
+    const target = list.stories.find((s) => s.state === "unstarted")!;
+    expect(target).toBeDefined();
+    const res = await fetch(`${server.url}/api/stories/${target.id}/transitions/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expectedHash: "deadbeef".repeat(8) }),
+    });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: { kind: string } };
+    expect(body.error.kind).toBe("STALE_WRITE");
+    // Verify the story state did NOT change (transition was rejected)
+    const after = (await (await fetch(`${server.url}/api/stories/${target.id}`)).json()) as {
+      story: { state: string };
+    };
+    expect(after.story.state).toBe("unstarted");
+  });
+
+  test("without expectedHash, server defaults to fresh-read (backward compat)", async () => {
+    // For legacy callers that don't send expectedHash, the server reads the
+    // file, uses that hash as the CAS guard, and proceeds. No protection
+    // against concurrent edits — but does not error.
+    const list = (await (await fetch(`${server.url}/api/stories`)).json()) as {
+      stories: { id: string; state: string }[];
+    };
+    const target = list.stories.find((s) => s.state === "unstarted")!;
+    expect(target).toBeDefined();
+    const res = await fetch(`${server.url}/api/stories/${target.id}/transitions/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
   });
 });
 

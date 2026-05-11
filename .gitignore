@@ -9,4 +9,11 @@ coverage
 .gstack/
 bun.lock
 .fulcrum/.cache/
+.fulcrum/.heartbeat
 .claude/
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
