@@ -28,6 +28,32 @@
   --col-icebox: #dde2fa;
   --col-done: #c5f0d3;
 
+  /* PT-style sidebar (dark slate / navy) */
+  --sidebar-bg: #243140;
+  --sidebar-bg-active: #1c2733;
+  --sidebar-ink: #d1d5db;
+  --sidebar-ink-active: #ffffff;
+  --sidebar-rule: #334155;
+  --sidebar-accent: #3b82f6;
+
+  /* Iteration divider band inside Current */
+  --iter-divider-bg: #475569;
+  --iter-divider-ink: #f1f5f9;
+
+  /* Action buttons (PT signature) */
+  --btn-start-bg: #2563eb;
+  --btn-start-ink: #ffffff;
+  --btn-finish-bg: #2563eb;
+  --btn-finish-ink: #ffffff;
+  --btn-deliver-bg: #ea580c;
+  --btn-deliver-ink: #ffffff;
+  --btn-accept-bg: #16a34a;
+  --btn-accept-ink: #ffffff;
+  --btn-reject-bg: #dc2626;
+  --btn-reject-ink: #ffffff;
+  --btn-restart-bg: #6b7280;
+  --btn-restart-ink: #ffffff;
+
   /* Story type accents */
   --type-feature: #d97706;
   --type-bug: #9f1239;
@@ -45,6 +71,10 @@
   --state-accepted-ink: #365314;
   --state-rejected-bg: #fecaca;
   --state-rejected-ink: #991b1b;
+
+  /* Tag chips (labels under story title) */
+  --tag-bg: rgba(0, 0, 0, 0.06);
+  --tag-ink: #4b5563;
 
   /* Header */
   --header-bg: var(--ink-primary);
@@ -68,6 +98,18 @@
   --col-backlog: #1e293b;
   --col-icebox: #312e81;
   --col-done: #14532d;
+
+  --sidebar-bg: #0f172a;
+  --sidebar-bg-active: #1e293b;
+  --sidebar-ink: #94a3b8;
+  --sidebar-ink-active: #f1f5f9;
+  --sidebar-rule: #1e293b;
+
+  --iter-divider-bg: #1e293b;
+  --iter-divider-ink: #cbd5e1;
+
+  --tag-bg: rgba(255, 255, 255, 0.08);
+  --tag-ink: #cbd5e1;
 
   --type-feature: #f59e0b;
   --type-bug: #fb7185;

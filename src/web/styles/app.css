@@ -22,6 +22,20 @@ body {
   flex-direction: column;
 }
 
+/* PT-style two-column layout: dark sidebar + main board panels */
+.app-body {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+@media (max-width: 1023px) {
+  .app-body {
+    grid-template-columns: 56px 1fr;
+  }
+}
+
 /* ─── HEADER ─── */
 .app-header {
   background: var(--header-bg);
@@ -98,7 +112,10 @@ body {
 }
 
 .col-header {
-  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
   border-bottom: 1px solid var(--rule);
   font-weight: 600;
   font-size: 13px;
@@ -107,12 +124,39 @@ body {
   background: inherit;
   z-index: 1;
 }
-.col-header .count {
+.col-header-title {
+  font-weight: 600;
+}
+.col-header-count {
   font-family: var(--font-mono);
   font-weight: 400;
   color: var(--ink-secondary);
   font-size: 12px;
-  margin-left: 6px;
+}
+.col-header-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.col-header-btn {
+  background: transparent;
+  border: 0;
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+.col-header-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ink-primary);
+}
+.col-header-btn-static {
+  cursor: default;
+  pointer-events: none;
 }
 
 .stories {
@@ -120,17 +164,156 @@ body {
   min-height: 0;
 }
 
-/* ─── STORY ROW ─── */
-.story {
-  display: grid;
-  grid-template-columns: 16px 1fr auto auto;
-  gap: 8px;
+/* ─── PT-STYLE SIDEBAR ─── */
+.sidebar {
+  background: var(--sidebar-bg);
+  color: var(--sidebar-ink);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--sidebar-rule);
+  overflow-y: auto;
+}
+.sidebar-project {
+  display: flex;
   align-items: center;
-  padding: 4px 10px;
+  gap: 6px;
+  padding: 10px 14px;
+  background: var(--sidebar-bg-active);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--sidebar-ink-active);
+  border-bottom: 1px solid var(--sidebar-rule);
+}
+.sidebar-project-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-project-chevron {
+  opacity: 0.6;
+  font-size: 10px;
+}
+.sidebar-meta {
+  display: flex;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--sidebar-rule);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.sidebar-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sidebar-ink);
+}
+.sidebar-meta-icon {
+  font-size: 11px;
+  opacity: 0.7;
+}
+.sidebar-add-story {
+  margin: 10px 14px;
+  padding: 8px 12px;
+  background: var(--sidebar-accent);
+  color: #fff;
+  border: 0;
+  border-radius: 3px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.sidebar-add-story:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.sidebar-add-story:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+}
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: var(--sidebar-ink);
+  border-left: 3px solid transparent;
+  cursor: default;
+  user-select: none;
+}
+.sidebar-link.is-active {
+  background: var(--sidebar-bg-active);
+  color: var(--sidebar-ink-active);
+  border-left-color: var(--sidebar-accent);
+}
+.sidebar-link.is-disabled {
+  opacity: 0.45;
+}
+.sidebar-link.is-warn .sidebar-link-label {
+  color: #fbbf24;
+}
+.sidebar-link-label {
+  flex: 1;
+}
+.sidebar-link-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  opacity: 0.75;
+  margin-left: 8px;
+}
+
+@media (max-width: 1023px) {
+  /* Collapsed sidebar: project name shows initials, links hide. Keep
+     Add Story icon visible. */
+  .sidebar-project-name,
+  .sidebar-project-chevron,
+  .sidebar-meta,
+  .sidebar-link-label,
+  .sidebar-link-badge {
+    display: none;
+  }
+  .sidebar-add-story {
+    margin: 8px;
+    padding: 8px;
+    font-size: 0;
+  }
+  .sidebar-add-story::before {
+    content: "+";
+    font-size: 18px;
+  }
+  .sidebar-link {
+    justify-content: center;
+    padding: 8px;
+  }
+}
+
+/* ─── STORY ROW (PT-style) ─── */
+.story {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--rule);
   cursor: grab;
   line-height: 1.35;
   touch-action: none;
+}
+.story-top {
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
 }
 .story:hover {
   background: rgba(0, 0, 0, 0.025);
@@ -172,6 +355,73 @@ body {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-secondary);
+}
+
+/* ─── INLINE ROW ACTION BUTTONS (PT signature) ─── */
+.story-actions {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.row-btn {
+  border: 0;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #fff;
+  line-height: 1.2;
+}
+.row-btn:hover {
+  filter: brightness(1.08);
+}
+.row-btn:focus-visible {
+  outline: 2px solid var(--ink-primary);
+  outline-offset: 1px;
+}
+.row-btn-start {
+  background: var(--btn-start-bg);
+  color: var(--btn-start-ink);
+}
+.row-btn-finish {
+  background: var(--btn-finish-bg);
+  color: var(--btn-finish-ink);
+}
+.row-btn-deliver {
+  background: var(--btn-deliver-bg);
+  color: var(--btn-deliver-ink);
+}
+.row-btn-accept {
+  background: var(--btn-accept-bg);
+  color: var(--btn-accept-ink);
+}
+.row-btn-reject {
+  background: var(--btn-reject-bg);
+  color: var(--btn-reject-ink);
+}
+.row-btn-restart {
+  background: var(--btn-restart-bg);
+  color: var(--btn-restart-ink);
+}
+
+/* ─── LABEL TAGS UNDER STORY TITLE ─── */
+.story-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  /* indent under the title column so tags align with the title, not the type icon */
+  padding-left: 24px;
+}
+.story-tag {
+  background: var(--tag-bg);
+  color: var(--tag-ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  line-height: 1.4;
 }
 
 /* ─── TYPE ICONS ─── */

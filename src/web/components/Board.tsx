@@ -236,11 +236,31 @@ export function Board({
           return (
             <ColumnDropZone key={c} column={c}>
               <div className={`col ${COLUMN_TINTS[c]}`}>
+              {/* PT-style panel header: title + counts on the left, +/⋮ actions on the right */}
               <div className="col-header">
-                {COLUMN_LABELS[c]}
-                <span className="count">
-                  · {list.length} {list.length === 1 ? "story" : "stories"}
+                <span className="col-header-title">{COLUMN_LABELS[c]}</span>
+                <span className="col-header-count">
+                  {list.length} {list.length === 1 ? "story" : "stories"}
                   {total > 0 ? ` · ${total} pts` : ""}
+                </span>
+                <span className="col-header-actions" aria-hidden>
+                  {c === "current" && !readOnly && (
+                    <button
+                      type="button"
+                      className="col-header-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onStartCreate) onStartCreate();
+                      }}
+                      title="Add story (c)"
+                      aria-label="Add story"
+                    >
+                      +
+                    </button>
+                  )}
+                  <span className="col-header-btn col-header-btn-static" title="Panel menu">
+                    ⋮
+                  </span>
                 </span>
               </div>
               <div className="stories">
@@ -266,6 +286,10 @@ export function Board({
                           story={s}
                           isFocused={focus.focusedId === s.id}
                           isExpanded={focus.expandedId === s.id}
+                          readOnly={readOnly}
+                          onTransition={(verb, reason) =>
+                            onTransition(s.id, verb, reason)
+                          }
                           onClick={() => {
                             const expanded =
                               focus.focusedId === s.id && focus.expandedId === s.id

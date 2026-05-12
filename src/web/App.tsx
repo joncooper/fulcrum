@@ -24,6 +24,7 @@ import { Board } from "./components/Board.tsx";
 import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { IterationClosePanel } from "./components/IterationClosePanel.tsx";
 import { SearchBar, matchesQuery } from "./components/SearchBar.tsx";
+import { Sidebar } from "./components/Sidebar.tsx";
 import { useKeyboard, type FocusState } from "./keyboard.ts";
 import { deriveColumns } from "./columns.ts";
 
@@ -495,42 +496,50 @@ export function App() {
           onClose={() => setSearchQuery(null)}
         />
       )}
-      <main
-        className="board-shell"
-        data-closing={closing ? "true" : undefined}
-        data-readonly={readOnly ? "true" : undefined}
-        role="main"
-        aria-label="Story board"
-      >
-        <Board
-          stories={filteredStories}
+      <div className="app-body">
+        <Sidebar
           project={project.data}
-          focus={focus}
-          setFocus={setFocus}
-          onTransition={handleTransition}
-          editingId={editingId}
-          onEditCancel={handleCancelEdit}
-          onEditSave={handleSaveEdit}
-          editSaving={updateStory.isPending}
-          creating={creating}
-          onCreate={handleCreate}
-          onCancelCreate={handleCancelCreate}
-          onStartCreate={() => setCreating(true)}
-          createSaving={createStory.isPending}
+          stories={stories.data}
+          onNewStory={() => setCreating(true)}
           readOnly={readOnly}
         />
-        {panelOpen && (
-          <IterationClosePanel
-            stories={stories.data.stories}
+        <main
+          className="board-shell"
+          data-closing={closing ? "true" : undefined}
+          data-readonly={readOnly ? "true" : undefined}
+          role="main"
+          aria-label="Story board"
+        >
+          <Board
+            stories={filteredStories}
             project={project.data}
-            onCommit={handleCommitClose}
-            onCancel={() => setPanelOpen(false)}
-            onReject={(id, reason) => handleTransition(id, "reject", reason)}
-            isCommitting={closeIter.isPending}
+            focus={focus}
+            setFocus={setFocus}
+            onTransition={handleTransition}
+            editingId={editingId}
+            onEditCancel={handleCancelEdit}
+            onEditSave={handleSaveEdit}
+            editSaving={updateStory.isPending}
+            creating={creating}
+            onCreate={handleCreate}
+            onCancelCreate={handleCancelCreate}
+            onStartCreate={() => setCreating(true)}
+            createSaving={createStory.isPending}
+            readOnly={readOnly}
           />
-        )}
-        {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
-      </main>
+          {panelOpen && (
+            <IterationClosePanel
+              stories={stories.data.stories}
+              project={project.data}
+              onCommit={handleCommitClose}
+              onCancel={() => setPanelOpen(false)}
+              onReject={(id, reason) => handleTransition(id, "reject", reason)}
+              isCommitting={closeIter.isPending}
+            />
+          )}
+          {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
+        </main>
+      </div>
       <StatusBar
         ritualNote={
           lastClosed && closing
