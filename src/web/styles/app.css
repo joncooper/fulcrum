@@ -79,6 +79,24 @@ body {
   white-space: nowrap;
 }
 
+/* Compact velocity trend sparkline — last-N iteration_history entries as
+   vertical bars. Sits next to the rolling-3 velocity stat in the header
+   to give "progress over time" feedback (PT CD2 signal). */
+.velocity-trend {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+  margin-left: 4px;
+}
+.velocity-trend-bar {
+  width: 4px;
+  background: currentColor;
+  opacity: 0.55;
+  border-radius: 1px;
+  min-height: 2px;
+}
+
 /* ─── MAIN BOARD ─── */
 .board {
   display: grid;

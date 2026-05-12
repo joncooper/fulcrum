@@ -12,6 +12,7 @@ import {
   FulcrumApiError,
   type CreateStoryInput,
   type IterationClosedEvent,
+  type IterationRecordDto,
   type MalformedStory,
   type SseStatus,
   type StoryPatch,
@@ -25,6 +26,7 @@ import { HelpOverlay } from "./components/HelpOverlay.tsx";
 import { IterationClosePanel } from "./components/IterationClosePanel.tsx";
 import { SearchBar, matchesQuery } from "./components/SearchBar.tsx";
 import { Sidebar } from "./components/Sidebar.tsx";
+import { VelocityTrend } from "./components/VelocityTrend.tsx";
 import { useKeyboard, type FocusState } from "./keyboard.ts";
 import { deriveColumns } from "./columns.ts";
 
@@ -441,6 +443,7 @@ export function App() {
           projectName="…"
           iteration="…"
           velocity="…"
+          history={[]}
           theme={theme}
           onToggleTheme={toggle}
           onClickIteration={() => undefined}
@@ -458,6 +461,7 @@ export function App() {
           projectName="!"
           iteration="error"
           velocity="—"
+          history={[]}
           theme={theme}
           onToggleTheme={toggle}
           onClickIteration={() => undefined}
@@ -476,6 +480,7 @@ export function App() {
         projectName={project.data.name}
         iteration={iterationLabel(project.data)}
         velocity={`velocity ${project.data.velocity} pts`}
+        history={project.data.iteration_history}
         theme={theme}
         onToggleTheme={toggle}
         onClickIteration={readOnly ? () => undefined : () => setPanelOpen(true)}
@@ -607,6 +612,7 @@ function Header({
   projectName,
   iteration,
   velocity,
+  history,
   theme,
   onToggleTheme,
   onClickIteration,
@@ -614,6 +620,7 @@ function Header({
   projectName: string;
   iteration: string;
   velocity: string;
+  history: readonly IterationRecordDto[];
   theme: "day" | "dark";
   onToggleTheme: () => void;
   onClickIteration: () => void;
@@ -630,6 +637,7 @@ function Header({
         {iteration}
       </button>
       <span className="vel">{velocity}</span>
+      <VelocityTrend history={history} />
       <button className="theme-toggle" onClick={onToggleTheme} aria-label="Toggle theme">
         {theme === "day" ? "dark" : "day"}
       </button>
