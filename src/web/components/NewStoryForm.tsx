@@ -27,14 +27,19 @@ export function NewStoryForm({
     titleRef.current?.focus();
   }, []);
 
+  // The form is invalid in three cases: no title, feature with no points,
+  // or already saving. The button mirrors these so the user can never click
+  // it and get silent rejection (the actual cause of "stuck create" reports —
+  // clicking did nothing visible because submit() short-circuited).
+  const titleEmpty = title.trim().length === 0;
+  const featureMissingPoints = type === "feature" && points === null;
+  const invalid = titleEmpty || featureMissingPoints;
+
   const submit = () => {
-    if (saving) return;
-    const t = title.trim();
-    if (t.length === 0) return;
-    if (type === "feature" && points === null) return;
+    if (saving || invalid) return;
     onCreate({
       type,
-      title: t,
+      title: title.trim(),
       ...(type === "feature" && points !== null ? { points } : {}),
     });
   };
@@ -96,20 +101,26 @@ export function NewStoryForm({
         />
       </div>
       <div className="edit-actions">
-        <button className="action-btn" onClick={submit} disabled={saving || title.trim().length === 0}>
+        <button className="action-btn" onClick={submit} disabled={saving || invalid}>
           {saving ? "creating…" : "create"}
         </button>
         {/*
           Cancel is ALWAYS clickable, even mid-save. If the network is slow or
           a request is hung, the user needs an escape hatch — otherwise the
-          form sits stuck at "creating…" indefinitely (T-1037). The in-flight
-          mutation continues in the background; on success the new story
-          shows up via SSE invalidation, on error the toast surfaces.
+          form sits stuck at "creating…" indefinitely. The in-flight mutation
+          continues in the background; on success the new story shows up via
+          SSE invalidation, on error the toast surfaces.
         */}
         <button className="action-btn" onClick={onCancel}>
           cancel
         </button>
-        <span className="expanded-hint">⌘↵ to create · esc to cancel</span>
+        <span className="expanded-hint">
+          {featureMissingPoints
+            ? "feature stories need points"
+            : titleEmpty
+              ? "title required"
+              : "⌘↵ to create · esc to cancel"}
+        </span>
       </div>
     </div>
   );
