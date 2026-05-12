@@ -95,13 +95,6 @@ export const StoryFrontmatterSchema = z
     provenance: z.string().min(1).optional(),
   })
   .refine(
-    (s) => s.type !== "feature" || (s.points !== undefined),
-    {
-      message: "feature stories require `points`",
-      path: ["points"],
-    },
-  )
-  .refine(
     (s) => s.type === "feature" || s.points === undefined,
     {
       message: "only feature stories carry `points` (bug/chore/release are non-estimable)",

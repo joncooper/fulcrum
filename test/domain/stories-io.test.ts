@@ -57,18 +57,19 @@ describe("createStory", () => {
     }
   });
 
-  test("returns INVALID_FRONTMATTER when feature has no points", async () => {
+  test("feature without points is allowed (deferred estimation)", async () => {
     const dir = makeStoriesDir();
     try {
       const r = await createStory({
         storiesDir: dir,
         type: "feature",
-        title: "needs points",
+        title: "size me later",
         position: "a0",
       });
-      expect(r.ok).toBe(false);
-      if (r.ok) return;
-      expect(r.error.kind).toBe("INVALID_FRONTMATTER");
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.value.story.frontmatter.type).toBe("feature");
+      expect(r.value.story.frontmatter.points).toBeUndefined();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -232,13 +233,13 @@ describe("readStoryFile", () => {
     }
   });
 
-  test("INVALID_FRONTMATTER for schema violations (e.g. feature without points)", async () => {
+  test("INVALID_FRONTMATTER for schema violations (e.g. non-feature with points)", async () => {
     const dir = makeStoriesDir();
     try {
       const path = join(dir, "T-1042-7b21-schemaless.md");
       writeFileSync(
         path,
-        `---\nid: T-1042-7b21\ntype: feature\nstate: unstarted\nposition: a0\ncreated: 2026-05-08\n---\n\nfeature without points\n`,
+        `---\nid: T-1042-7b21\ntype: bug\npoints: 3\nstate: unstarted\nposition: a0\ncreated: 2026-05-08\n---\n\nbug with points\n`,
       );
       const r = await readStoryFile(path);
       expect(r.ok).toBe(false);

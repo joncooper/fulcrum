@@ -91,14 +91,13 @@ describe("StoryFrontmatterSchema — id format", () => {
 });
 
 describe("StoryFrontmatterSchema — refinements", () => {
-  test("feature without points is rejected", () => {
+  test("feature without points is allowed (deferred estimation)", () => {
     const { points: _omit, ...withoutPoints } = baseStory;
     void _omit;
     const result = StoryFrontmatterSchema.safeParse(withoutPoints);
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues.some((i) => i.path.includes("points"))).toBe(true);
-    }
+    // Features may skip estimation at create time; user can size later
+    // in the iteration close panel or via fulcrum edit.
+    expect(result.success).toBe(true);
   });
 
   test("non-feature stories cannot carry points (bug/chore/release are non-estimable)", () => {

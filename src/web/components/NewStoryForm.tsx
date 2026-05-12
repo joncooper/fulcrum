@@ -27,13 +27,12 @@ export function NewStoryForm({
     titleRef.current?.focus();
   }, []);
 
-  // The form is invalid in three cases: no title, feature with no points,
-  // or already saving. The button mirrors these so the user can never click
-  // it and get silent rejection (the actual cause of "stuck create" reports —
-  // clicking did nothing visible because submit() short-circuited).
+  // The form is invalid only when the title is empty or a save is in flight.
+  // Features may be created without points (the user can estimate later in
+  // the iteration close panel or on the row). Non-feature types reject
+  // points at the schema layer regardless of what the form sends.
   const titleEmpty = title.trim().length === 0;
-  const featureMissingPoints = type === "feature" && points === null;
-  const invalid = titleEmpty || featureMissingPoints;
+  const invalid = titleEmpty;
 
   const submit = () => {
     if (saving || invalid) return;
@@ -115,11 +114,7 @@ export function NewStoryForm({
           cancel
         </button>
         <span className="expanded-hint">
-          {featureMissingPoints
-            ? "feature stories need points"
-            : titleEmpty
-              ? "title required"
-              : "⌘↵ to create · esc to cancel"}
+          {titleEmpty ? "title required" : "⌘↵ to create · esc to cancel"}
         </span>
       </div>
     </div>

@@ -229,11 +229,17 @@ describe("CLI dogfooding flow", () => {
     expect(stderr()).toContain("INVALID_FRONTMATTER");
   });
 
-  test("feature without --points is rejected (refines fail)", async () => {
+  test("feature without --points is allowed (deferred estimation)", async () => {
     await main(["init"]);
-    stderrChunks = [];
-    expect(await main(["new", "feature", "no points"])).toBe(1);
-    expect(stderr()).toContain("INVALID_FRONTMATTER");
+    stdoutChunks = [];
+    expect(await main(["new", "feature", "size me later"])).toBe(0);
+    expect(stdout()).toContain("T-1001-");
+    expect(stdout()).toContain("size me later");
+    stdoutChunks = [];
+    await main(["show", "1001"]);
+    const out = stdout();
+    expect(out).toContain("type:      feature");
+    expect(out).not.toContain("points:");
   });
 
   test("filenames are slugified and grep-friendly", async () => {
