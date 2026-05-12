@@ -99,7 +99,14 @@ export function NewStoryForm({
         <button className="action-btn" onClick={submit} disabled={saving || title.trim().length === 0}>
           {saving ? "creating…" : "create"}
         </button>
-        <button className="action-btn" onClick={onCancel} disabled={saving}>
+        {/*
+          Cancel is ALWAYS clickable, even mid-save. If the network is slow or
+          a request is hung, the user needs an escape hatch — otherwise the
+          form sits stuck at "creating…" indefinitely (T-1037). The in-flight
+          mutation continues in the background; on success the new story
+          shows up via SSE invalidation, on error the toast surfaces.
+        */}
+        <button className="action-btn" onClick={onCancel}>
           cancel
         </button>
         <span className="expanded-hint">⌘↵ to create · esc to cancel</span>

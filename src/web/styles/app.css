@@ -398,6 +398,32 @@ body {
 .edit-input-narrow {
   flex: 0 0 80px;
 }
+
+/*
+ * Native <select> elements render with browser chrome (3D inset, system
+ * dropdown arrow) that ignores font-family + clashes with the rest of the
+ * form (T-1038). Strip the native appearance and substitute a custom caret
+ * (inline SVG data URL) so the closed control sits flush with text inputs
+ * and reads as IBM Plex Sans like everything else on the board.
+ */
+select.edit-input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 24px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23737373' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 10px 6px;
+  cursor: pointer;
+}
+[data-theme="dark"] select.edit-input {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23a3a3a3' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+}
+select.edit-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 .edit-title {
   font-weight: 500;
 }
